@@ -806,9 +806,7 @@ function AddRow({ placeholder, onAdd, onCancel }) {
 // --- Main App -----------------------------------------------------------------
 export default function App() {
 
-  // ---- DEV TOOLBAR state (outside the app chrome) ----
   const [view, setView]   = useState("factory"); // "factory" | "brand"
-  const [plan, setPlan]   = useState("free");    // "free" | "pro"
 
   // ---- shared flat materials ----
   const [materials, setMaterials] = useState(seedMaterials);
@@ -1064,51 +1062,9 @@ export default function App() {
         select { appearance:none; }
       `}</style>
 
-      {/* ===== DEV TOOLBAR ===== */}
-      <div style={{ background:"#111114", borderBottom:"1px solid #1F1F23", padding:"0 20px", display:"flex", alignItems:"center", gap:0, height:36 }}>
-        <span style={{ fontSize:9.5, fontWeight:700, color:"#52525B", textTransform:"uppercase", letterSpacing:"0.12em", paddingRight:16, borderRight:"1px solid #27272A", marginRight:16 }}>Dev</span>
-
-        {/* View toggle */}
-        <div style={{ display:"flex", alignItems:"center", gap:9, paddingRight:16, borderRight:"1px solid #27272A", marginRight:16 }}>
-          <span style={{ fontSize:10.5, color:"#52525B", fontWeight:500, letterSpacing:"0.02em" }}>View</span>
-          <div style={{ display:"flex", background:"#1C1C1F", borderRadius:5, padding:2, gap:1 }}>
-            {[["factory","Factory"],["brand","Brand"]].map(([v,label]) => (
-              <button key={v} onClick={() => { setView(v); setNav(null); setBNav(null); setSearch(""); }}
-                style={{ padding:"2px 10px", borderRadius:3, border:"none", cursor:"pointer", fontSize:11, fontWeight:view===v?600:400, fontFamily:"inherit",
-                  background: view===v ? "#3F3F46" : "transparent",
-                  color: view===v ? "#FAFAFA" : "#52525B",
-                  boxShadow: view===v ? "0 1px 2px rgba(0,0,0,0.4)" : "none",
-                  transition:"all 0.12s", lineHeight:"18px" }}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Plan toggle - brand only */}
-        {view === "brand" && (
-          <div style={{ display:"flex", alignItems:"center", gap:9 }}>
-            <span style={{ fontSize:10.5, color:"#52525B", fontWeight:500, letterSpacing:"0.02em" }}>Plan</span>
-            <div style={{ display:"flex", background:"#1C1C1F", borderRadius:5, padding:2, gap:1 }}>
-              {[["free","Free"],["pro","Pro"]].map(([p,label]) => (
-                <button key={p} onClick={() => { setPlan(p); setBNav(null); setSearch(""); }}
-                  style={{ padding:"2px 10px", borderRadius:3, border:"none", cursor:"pointer", fontSize:11, fontWeight:plan===p?600:400, fontFamily:"inherit",
-                    background: plan===p ? (p==="pro" ? "#4338CA" : "#3F3F46") : "transparent",
-                    color: plan===p ? "#FAFAFA" : "#52525B",
-                    boxShadow: plan===p ? "0 1px 2px rgba(0,0,0,0.4)" : "none",
-                    transition:"all 0.12s", lineHeight:"18px" }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            {plan === "pro" && <span style={{ fontSize:10, fontWeight:600, color:"#6366F1", letterSpacing:"0.05em" }}>PRO</span>}
-          </div>
-        )}
-      </div>
-
       {/* ===== NAV BAR ===== */}
-      <div style={{ background:"#fff", borderBottom:"1px solid #EFEFEF", padding:"0 24px" }}>
-        <div style={{ maxWidth:960, margin:"0 auto", height:52, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+      <div style={{ background:"#fff", borderBottom:"1px solid #EFEFEF" }}>
+        <div style={{ maxWidth:1400, margin:"0 auto", height:52, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 clamp(16px, 3vw, 48px)" }}>
 
           {/* Logo + breadcrumb */}
           <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
@@ -1124,11 +1080,7 @@ export default function App() {
               </>
             )}
 
-            {view === "brand" && plan === "free" && (
-              <BCBtn label="Approvals" dim={false} onClick={null} />
-            )}
-
-            {view === "brand" && plan === "pro" && (
+            {view === "brand" && (
               <>
                 <BCBtn label="Approvals" dim={!!bNav} onClick={bHome} />
                 {curSupplier && <><BCSep/><BCBtn label={curSupplier.name} dim={!!curSeason}   onClick={() => bSupplier(curSupplier.id)} /></>}
@@ -1138,13 +1090,11 @@ export default function App() {
             )}
           </div>
 
-          {/* App title (right) */}
-          <span style={{ fontSize:12, color:"#D1D5DB", flexShrink:0 }}>Material Approvals</span>
         </div>
       </div>
 
       {/* ===== PAGE CONTENT ===== */}
-      <div style={{ maxWidth:960, margin:"0 auto", padding:"24px 24px" }}>
+      <div style={{ maxWidth:1400, margin:"0 auto", padding:"24px clamp(16px, 3vw, 48px)" }}>
 
         {/* ---- FACTORY VIEW ---- */}
         {view === "factory" && (
@@ -1215,27 +1165,8 @@ export default function App() {
           </>
         )}
 
-        {/* ---- BRAND VIEW: FREE (single supplier) ---- */}
-        {view === "brand" && plan === "free" && (
-          <div>
-            {/* Single factory context header */}
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 12px", background:"#fff", border:"1px solid #EFEFEF", borderRadius:8 }}>
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.8"><polygon points="2 20 2 10 8 6 8 10 14 6 14 10 20 6 22 6 22 20"/></svg>
-                <span style={{ fontSize:12.5, fontWeight:600, color:"#374151" }}>Apex Textiles</span>
-                <span style={{ fontSize:11, color:"#D1D5DB" }}>Single supplier</span>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
-              <FilterBar />
-            </div>
-            <MatTable rows={allMats} />
-            <div style={{ fontSize:11.5, color:"#D1D5DB", marginTop:9, paddingLeft:2 }}>{allMats.length} material{allMats.length!==1?"s":""}</div>
-          </div>
-        )}
-
-        {/* ---- BRAND VIEW: PRO ---- */}
-        {view === "brand" && plan === "pro" && (
+        {/* ---- BRAND VIEW (always pro) ---- */}
+        {view === "brand" && (
           <>
             {/* Search - always visible */}
             <div style={{ position:"relative", marginBottom:20 }}>
@@ -1321,6 +1252,32 @@ export default function App() {
         <NewSubmissionModal onClose={() => setShowNew(false)} onSubmit={addMaterial}
           existingStyles={allStyles} existingMaterials={scopedMaterials} />
       )}
+
+      {/* ===== BOTTOM VIEW TOGGLE ===== */}
+      <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:100 }}>
+        <div style={{ display:"flex", background:"#111827", borderRadius:40, padding:4, gap:2, boxShadow:"0 4px 24px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.12)" }}>
+          {[
+            { v:"factory", icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="2 20 2 10 8 6 8 10 14 6 14 10 20 6 22 6 22 20"/></svg>, label:"Factory" },
+            { v:"brand",   icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>, label:"Brand" },
+          ].map(({ v, icon, label }) => (
+            <button key={v}
+              onClick={() => { setView(v); setNav(null); setBNav(null); setSearch(""); }}
+              style={{
+                display:"flex", alignItems:"center", gap:6,
+                padding:"8px 18px", borderRadius:36, border:"none", cursor:"pointer",
+                fontFamily:"inherit", fontSize:12.5, fontWeight:600,
+                background: view===v ? "#fff" : "transparent",
+                color: view===v ? "#111827" : "rgba(255,255,255,0.45)",
+                transition:"all 0.15s cubic-bezier(0.34,1.56,0.64,1)",
+              }}>
+              {icon}{label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom padding so content doesn't hide behind toggle */}
+      <div style={{ height:80 }} />
     </div>
   );
 }
