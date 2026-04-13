@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { loadAllData, createRecord, updateRecord } from "./airtable";
 
 // --- Constants ----------------------------------------------------------------
 const MATERIAL_TYPES = ["Lab Dip", "Trim", "Fabric Swatch"];
@@ -806,10 +807,18 @@ function AddRow({ placeholder, onAdd, onCancel }) {
 // --- Main App -----------------------------------------------------------------
 export default function App() {
 
-  const [view, setView]   = useState("factory"); // "factory" | "brand"
+  const [view, setView]       = useState("factory"); // "factory" | "brand"
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
-  // ---- shared flat materials ----
-  const [materials, setMaterials] = useState(seedMaterials);
+  // ---- shared flat materials (populated from Airtable on mount) ----
+  const [materials, setMaterials] = useState([]);
+
+  useEffect(() => {
+    loadAllData()
+      .then(data => { setMaterials(data); setLoading(false); })
+      .catch(err  => { console.error("Airtable load error:", err); setLoadError(err.message); setLoading(false); });
+  }, []);
 
   // ---- factory folder structure: brands -> products ----
   const [brands, setBrands] = useState([
@@ -902,19 +911,53 @@ export default function App() {
         products: b.products.map(pr => pr.id !== nav.productId ? pr : { ...pr, materialIds:[...pr.materialIds, nm.id] }) }));
     }
   }
-  function handleApprove() {
+  async function handleApprove() {
+    const mat    = materials.find(m => m.id === selected);
+    const latest = mat?.versions[mat.versions.length - 1];
+    if (latest?.airtableId) {
+      await updateRecord("Submissions", latest.airtableId, {
+        "Status":        "Approved",
+        "Brand Comment": brandComment,
+        "Approval Date": new Date().toISOString().slice(0, 10),
+      });
+    }
     setMaterials(p => p.map(m => m.id !== selected ? m : { ...m,
       versions: m.versions.map((v,i) => i === m.versions.length-1 ? { ...v, status:"Approved", brandComment, approvalDate:new Date().toISOString().slice(0,10) } : v) }));
     setBrandComment("");
   }
-  function handleReject() {
+  async function handleReject() {
+    const mat    = materials.find(m => m.id === selected);
+    const latest = mat?.versions[mat.versions.length - 1];
+    if (latest?.airtableId) {
+      await updateRecord("Submissions", latest.airtableId, {
+        "Status":        "Rejected",
+        "Brand Comment": brandComment,
+        "Approval Date": new Date().toISOString().slice(0, 10),
+      });
+    }
     setMaterials(p => p.map(m => m.id !== selected ? m : { ...m,
       versions: m.versions.map((v,i) => i === m.versions.length-1 ? { ...v, status:"Rejected", brandComment, approvalDate:new Date().toISOString().slice(0,10) } : v) }));
     setBrandComment("");
   }
-  function handleNewVersion(materialId, nv) {
+  async function handleNewVersion(materialId, nv) {
+    const mat        = materials.find(m => m.id === materialId);
+    const newVersion = mat ? mat.versions.length + 1 : 1;
+    let   airtableId = null;
+    if (mat?.airtableId) {
+      const created = await createRecord("Submissions", {
+        "Material":        [mat.airtableId],
+        "Version":         newVersion,
+        "Submission Date": new Date().toISOString().slice(0, 10),
+        "Factory Notes":   nv.factoryNotes,
+        "Status":          "Pending",
+        "Courier":         nv.courier,
+        "Tracking Number": nv.trackingNumber,
+        "Shipment Status": nv.trackingNumber ? "In Transit" : "At Factory",
+      });
+      airtableId = created.id;
+    }
     setMaterials(p => p.map(m => m.id !== materialId ? m : { ...m,
-      versions:[...m.versions, { version:m.versions.length+1, submissionDate:new Date().toISOString().slice(0,10),
+      versions:[...m.versions, { airtableId, version:newVersion, submissionDate:new Date().toISOString().slice(0,10),
         image:nv.image, factoryNotes:nv.factoryNotes, status:"Pending", brandComment:"", approvalDate:null,
         courier:nv.courier, trackingNumber:nv.trackingNumber, shipmentStatus:nv.trackingNumber ? "In Transit" : "At Factory" }] }));
     setShowNewVersionFor(null);
@@ -1046,6 +1089,25 @@ export default function App() {
   function BCSep() { return <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2" style={{ flexShrink:0 }}><polyline points="9 18 15 12 9 6"/></svg>; }
 
   const icoCheck = <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
+
+  // ---- loading / error screens ----
+  if (loading) return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", color:"#9CA3AF", fontSize:14, background:"#F9FAFB" }}>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ width:32, height:32, border:"2.5px solid #E5E7EB", borderTopColor:"#111827", borderRadius:"50%", animation:"spin 0.7s linear infinite", margin:"0 auto 14px" }} />
+        Loading...
+      </div>
+    </div>
+  );
+  if (loadError) return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", color:"#EF4444", fontSize:13, background:"#F9FAFB", padding:24 }}>
+      <div style={{ textAlign:"center", maxWidth:360 }}>
+        <div style={{ fontWeight:600, marginBottom:8 }}>Could not connect to Airtable</div>
+        <div style={{ color:"#9CA3AF", lineHeight:1.6 }}>{loadError}</div>
+        <div style={{ color:"#C4C9D4", fontSize:11.5, marginTop:12 }}>Check your AIRTABLE_TOKEN and AIRTABLE_BASE_ID in Vercel environment variables.</div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily:"DM Sans, Helvetica Neue, sans-serif", background:"#F9FAFB", minHeight:"100vh", color:"#111827" }}>
