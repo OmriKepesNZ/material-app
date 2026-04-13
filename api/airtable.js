@@ -135,6 +135,8 @@ async function handlePOST(body) {
 }
 
 export default async function handler(req, res) {
+  console.log("TOKEN starts with:", process.env.AIRTABLE_TOKEN?.slice(0, 6));
+  console.log("BASE_ID:", process.env.AIRTABLE_BASE_ID);
   res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
