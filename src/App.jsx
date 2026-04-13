@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { loadAllData, createRecord, updateRecord } from "./airtable";
 
 // --- Constants ----------------------------------------------------------------
@@ -820,54 +820,54 @@ export default function App() {
       .catch(err  => { console.error("Airtable load error:", err); setLoadError(err.message); setLoading(false); });
   }, []);
 
-  // ---- factory folder structure: brands -> products ----
-  const [brands, setBrands] = useState([
-    { id:"b1", name:"Arc\'teryx",  products:[{ id:"p1", name:"Trail Pant",       materialIds:[1,2] }, { id:"p2", name:"Rain Jacket",       materialIds:[3,4] }] },
-    { id:"b2", name:"Patagonia",   products:[{ id:"p3", name:"Nano Puff Jacket", materialIds:[]    }] },
-  ]);
-
-  // ---- brand pro structure: suppliers -> seasons -> products ----
-  const [suppliers, setSuppliers] = useState([
-    { id:"s1", name:"Apex Textiles",
-      seasons:[
-        { id:"ss1", name:"FW25", products:[{ id:"bp1", name:"Trail Pant", materialIds:[1,2] }, { id:"bp2", name:"Rain Jacket", materialIds:[3,4] }] },
-        { id:"ss2", name:"SS26", products:[{ id:"bp3", name:"Field Short", materialIds:[] }] },
-      ],
-    },
-    { id:"s2", name:"Summit Fabrics",
-      seasons:[
-        { id:"ss3", name:"FW25", products:[{ id:"bp4", name:"Rain Jacket", materialIds:[3,4] }, { id:"bp5", name:"Nano Puff Jacket", materialIds:[] }] },
-      ],
-    },
-    { id:"s3", name:"Pacific Mill",
-      seasons:[
-        { id:"ss4", name:"SS26", products:[{ id:"bp6", name:"Baselayer Top", materialIds:[] }] },
-      ],
-    },
-  ]);
-
-  // ---- nav: factory ----
-  const [nav, setNav]                 = useState(null); // null | brandId | {brandId, productId}
-  const [addingBrand, setAddingBrand] = useState(false);
+  // ---- nav state ----
+  const [nav, setNav]                     = useState(null);
+  const [addingBrand, setAddingBrand]     = useState(false);
   const [addingProduct, setAddingProduct] = useState(false);
-
-  // ---- nav: brand (pro) ----
-  // null | supplierId | {supplierId, seasonId} | {supplierId, seasonId, productId}
-  const [bNav, setBNav] = useState(null);
+  const [bNav, setBNav]                   = useState(null);
 
   // ---- shared material state ----
-  const [selected, setSelected]           = useState(null);
-  const [showNew, setShowNew]             = useState(false);
-  const [filters, setFilters]             = useState({ type:"", status:"" });
-  const [brandComment, setBrandComment]   = useState("");
+  const [selected, setSelected]                   = useState(null);
+  const [showNew, setShowNew]                     = useState(false);
+  const [filters, setFilters]                     = useState({ type:"", status:"" });
+  const [brandComment, setBrandComment]           = useState("");
   const [showNewVersionFor, setShowNewVersionFor] = useState(null);
-  const [search, setSearch]               = useState("");
+  const [search, setSearch]                       = useState("");
 
-  // ---- derived: factory ----
-  const curBrand   = nav ? brands.find(b => b.id === (nav.brandId || nav)) : null;
-  const curProduct = (nav && nav.productId && curBrand) ? curBrand.products.find(p => p.id === nav.productId) : null;
+  // ---- derive folder structures dynamically from Airtable materials ----
+  // Factory view: group by brand -> product
+  const brands = useMemo(() => {
+    const map = {};
+    materials.forEach(m => {
+      const b = m.brand || "Unknown Brand";
+      const p = m.styleName || "Unknown";
+      if (!map[b]) map[b] = { id:b, name:b, products:{} };
+      if (!map[b].products[p]) map[b].products[p] = { id:b+"__"+p, name:p, materialIds:[] };
+      map[b].products[p].materialIds.push(m.id);
+    });
+    return Object.values(map).map(b => ({ ...b, products:Object.values(b.products) }));
+  }, [materials]);
 
-  // ---- derived: brand pro ----
+  // Brand view: group by supplier -> season -> product
+  const suppliers = useMemo(() => {
+    const map = {};
+    materials.forEach(m => {
+      const s  = m.factoryName || "Unknown Supplier";
+      const se = m.season      || "Unknown Season";
+      const p  = m.styleName   || "Unknown Product";
+      if (!map[s]) map[s] = { id:s, name:s, seasons:{} };
+      if (!map[s].seasons[se]) map[s].seasons[se] = { id:s+"__"+se, name:se, products:{} };
+      if (!map[s].seasons[se].products[p]) map[s].seasons[se].products[p] = { id:s+"__"+se+"__"+p, name:p, materialIds:[] };
+      map[s].seasons[se].products[p].materialIds.push(m.id);
+    });
+    return Object.values(map).map(s => ({
+      ...s, seasons:Object.values(s.seasons).map(se => ({ ...se, products:Object.values(se.products) }))
+    }));
+  }, [materials]);
+
+  // ---- derived nav objects ----
+  const curBrand    = nav ? brands.find(b => b.id === (nav.brandId || nav)) : null;
+  const curProduct  = (nav && nav.productId && curBrand) ? curBrand.products.find(p => p.id === nav.productId) : null;
   const curSupplier = bNav ? suppliers.find(s => s.id === (typeof bNav === "string" ? bNav : bNav.supplierId)) : null;
   const curSeason   = (bNav && bNav.seasonId && curSupplier) ? curSupplier.seasons.find(s => s.id === bNav.seasonId) : null;
   const curBProd    = (bNav && bNav.productId && curSeason)  ? curSeason.products.find(p => p.id === bNav.productId) : null;
@@ -894,10 +894,9 @@ export default function App() {
   function bProd(sid, ssid, pid){ setBNav({ supplierId:sid, seasonId:ssid, productId:pid }); setSelected(null); setFilters({ type:"", status:"" }); setSearch(""); }
 
   // ---- mutators ----
-  function addBrand(name)   { setBrands(p => [...p, { id:"b"+Date.now(), name, products:[] }]); setAddingBrand(false); }
+  function addBrand(name)   { setAddingBrand(false); }  // brands are derived from Airtable data
   function addProduct(brandId, name) {
-    setBrands(p => p.map(b => b.id !== brandId ? b : { ...b, products:[...b.products, { id:"p"+Date.now(), name, materialIds:[] }] }));
-    setAddingProduct(false);
+    setAddingProduct(false);  // products are derived from Airtable data
   }
   function addMaterial(data) {
     const nm = { id:Date.now(), styleName:curProduct ? curProduct.name : "New Style", season:"FW25", factoryName:"Apex Textiles",
