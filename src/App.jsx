@@ -821,10 +821,12 @@ export default function App() {
   }, []);
 
   // ---- nav state ----
+  // Factory nav: null = product list, string = productId (inside a product)
   const [nav, setNav]                     = useState(null);
-  const [addingBrand, setAddingBrand]     = useState(false);
   const [addingProduct, setAddingProduct] = useState(false);
-  const [bNav, setBNav]                   = useState(null);
+
+  // Brand nav: null | supplierId | {supplierId,seasonId} | {supplierId,seasonId,productId}
+  const [bNav, setBNav] = useState(null);
 
   // ---- shared material state ----
   const [selected, setSelected]                   = useState(null);
@@ -835,20 +837,18 @@ export default function App() {
   const [search, setSearch]                       = useState("");
 
   // ---- derive folder structures dynamically from Airtable materials ----
-  // Factory view: group by brand -> product
-  const brands = useMemo(() => {
+  // Factory view: flat product list
+  const products = useMemo(() => {
     const map = {};
     materials.forEach(m => {
-      const b = m.brand || "Unknown Brand";
       const p = m.styleName || "Unknown";
-      if (!map[b]) map[b] = { id:b, name:b, products:{} };
-      if (!map[b].products[p]) map[b].products[p] = { id:b+"__"+p, name:p, materialIds:[] };
-      map[b].products[p].materialIds.push(m.id);
+      if (!map[p]) map[p] = { id:p, name:p, brand:m.brand||"", materialIds:[] };
+      map[p].materialIds.push(m.id);
     });
-    return Object.values(map).map(b => ({ ...b, products:Object.values(b.products) }));
+    return Object.values(map);
   }, [materials]);
 
-  // Brand view: group by supplier -> season -> product
+  // Brand view: suppliers -> seasons -> products
   const suppliers = useMemo(() => {
     const map = {};
     materials.forEach(m => {
@@ -866,8 +866,7 @@ export default function App() {
   }, [materials]);
 
   // ---- derived nav objects ----
-  const curBrand    = nav ? brands.find(b => b.id === (nav.brandId || nav)) : null;
-  const curProduct  = (nav && nav.productId && curBrand) ? curBrand.products.find(p => p.id === nav.productId) : null;
+  const curProduct  = nav ? products.find(p => p.id === nav) : null;
   const curSupplier = bNav ? suppliers.find(s => s.id === (typeof bNav === "string" ? bNav : bNav.supplierId)) : null;
   const curSeason   = (bNav && bNav.seasonId && curSupplier) ? curSupplier.seasons.find(s => s.id === bNav.seasonId) : null;
   const curBProd    = (bNav && bNav.productId && curSeason)  ? curSeason.products.find(p => p.id === bNav.productId) : null;
@@ -878,14 +877,12 @@ export default function App() {
     : curBProd
     ? materials.filter(m => curBProd.materialIds.includes(m.id))
     : materials;
-
-  const allStyles       = [...new Set(materials.map(m => m.styleName))];
+  const allStyles       = [...new Set(materials.map(m => m.styleName).filter(Boolean))];
   const selectedMaterial = selected ? (scopedMaterials.find(m => m.id === selected) || materials.find(m => m.id === selected)) : null;
 
   // ---- nav helpers: factory ----
-  function goHome()    { setNav(null); setSelected(null); setAddingBrand(false); setAddingProduct(false); }
-  function goBrand(id) { setNav(id);   setSelected(null); setAddingProduct(false); }
-  function goProd(brandId, productId) { setNav({ brandId, productId }); setSelected(null); setFilters({ type:"", status:"" }); }
+  function goHome()         { setNav(null); setSelected(null); setAddingProduct(false); }
+  function goProd(productId){ setNav(productId); setSelected(null); setFilters({ type:"", status:"" }); }
 
   // ---- nav helpers: brand pro ----
   function bHome()           { setBNav(null);   setSelected(null); setSearch(""); }
@@ -894,21 +891,91 @@ export default function App() {
   function bProd(sid, ssid, pid){ setBNav({ supplierId:sid, seasonId:ssid, productId:pid }); setSelected(null); setFilters({ type:"", status:"" }); setSearch(""); }
 
   // ---- mutators ----
-  function addBrand(name)   { setAddingBrand(false); }  // brands are derived from Airtable data
-  function addProduct(brandId, name) {
-    setAddingProduct(false);  // products are derived from Airtable data
+  async function addProduct(name) {
+    // 1. Create the Product record in Airtable
+    const created = await createRecord("Products", { "Product Name": name });
+    const airtableProductId = created.id;
+    // 2. Optimistically add a placeholder material so the product folder appears
+    //    immediately (it will be replaced on next full reload)
+    const placeholder = {
+      id: "new__" + Date.now(),
+      airtableId: null,
+      airtableProductId,
+      styleName: name,
+      brand: "",
+      season: "",
+      factoryName: "",
+      materialType: "",
+      materialName: "__placeholder__",
+      versions: [],
+    };
+    setMaterials(p => [...p, placeholder]);
+    setAddingProduct(false);
   }
-  function addMaterial(data) {
-    const nm = { id:Date.now(), styleName:curProduct ? curProduct.name : "New Style", season:"FW25", factoryName:"Apex Textiles",
-      materialType:data.materialType, materialName:data.materialName,
-      versions:[{ version:data.detectedVersion||1, submissionDate:new Date().toISOString().slice(0,10), image:data.image,
-        factoryNotes:data.factoryNotes, status:"Pending", brandComment:"", approvalDate:null,
-        courier:data.courier, trackingNumber:data.trackingNumber, shipmentStatus:data.shipmentStatus }] };
-    setMaterials(p => [...p, nm]);
-    if (curProduct) {
-      setBrands(p => p.map(b => b.id !== nav.brandId ? b : { ...b,
-        products: b.products.map(pr => pr.id !== nav.productId ? pr : { ...pr, materialIds:[...pr.materialIds, nm.id] }) }));
-    }
+
+  async function addMaterial(data) {
+    const productName = curProduct ? curProduct.name : "New Style";
+    // Find the Airtable Product record ID for the current product
+    // We look for any material in this product that has an airtableProductId,
+    // or fall back to searching by styleName match
+    const existingMat = materials.find(m => m.styleName === productName && m.airtableId);
+    // Get product airtable ID  stored on placeholder or derived from existing material's product link
+    const airtableProductId = curProduct?.airtableProductId
+      || materials.find(m => m.styleName === productName && m.airtableProductId)?.airtableProductId
+      || null;
+
+    // 1. Create Material record in Airtable
+    const matFields = {
+      "Material Name": data.materialName,
+      "Type":          data.materialType,
+      "Supplier":      data.factoryName || "",
+    };
+    if (airtableProductId) matFields["Product"] = [airtableProductId];
+
+    const createdMat = await createRecord("Materials", matFields);
+    const matAirtableId = createdMat.id;
+
+    // 2. Create Submission record in Airtable
+    const subFields = {
+      "Material":        [matAirtableId],
+      "Version":         data.detectedVersion || 1,
+      "Submission Date": new Date().toISOString().slice(0, 10),
+      "Factory Notes":   data.factoryNotes || "",
+      "Extracted Specs": data.extractedSpecs || "",
+      "Status":          "Pending",
+      "Courier":         data.courier || "",
+      "Tracking Number": data.trackingNumber || "",
+      "Shipment Status": data.shipmentStatus || "At Factory",
+    };
+    const createdSub = await createRecord("Submissions", subFields);
+
+    // 3. Update local state
+    const nm = {
+      id:           matAirtableId,
+      airtableId:   matAirtableId,
+      styleName:    productName,
+      brand:        curProduct?.brand || "",
+      season:       data.season || "",
+      factoryName:  data.factoryName || "",
+      materialType: data.materialType,
+      materialName: data.materialName,
+      versions: [{
+        airtableId:     createdSub.id,
+        version:        data.detectedVersion || 1,
+        submissionDate: new Date().toISOString().slice(0, 10),
+        image:          data.image,
+        factoryNotes:   data.factoryNotes || "",
+        extractedSpecs: data.extractedSpecs || "",
+        status:         "Pending",
+        brandComment:   "",
+        approvalDate:   null,
+        courier:        data.courier || "",
+        trackingNumber: data.trackingNumber || "",
+        shipmentStatus: data.shipmentStatus || "At Factory",
+      }],
+    };
+    // Remove placeholder for this product if present, add real material
+    setMaterials(p => [...p.filter(m => !(m.styleName === productName && m.materialName === "__placeholder__")), nm]);
   }
   async function handleApprove() {
     const mat    = materials.find(m => m.id === selected);
@@ -1136,7 +1203,6 @@ export default function App() {
             {view === "factory" && (
               <>
                 <BCBtn label="Approvals" dim={!!nav} onClick={goHome} />
-                {curBrand   && <><BCSep/><BCBtn label={curBrand.name}   dim={!!curProduct} onClick={() => goBrand(curBrand.id)} /></>}
                 {curProduct && <><BCSep/><BCBtn label={curProduct.name} dim={false} onClick={null} /></>}
               </>
             )}
@@ -1182,44 +1248,30 @@ export default function App() {
             {/* Folder nav when not searching */}
             {searchResults === null && <>
 
-            {/* L1: brands */}
+            {/* L1: products */}
             {!nav && (
-              <Level title="Brands" count={brands.length + " brand" + (brands.length!==1?"s":"")}
-                action={<button onClick={() => setAddingBrand(true)} style={addBtn}><svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Brand</button>}>
-                <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                  {brands.length===0 && !addingBrand && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No brands yet</div>}
-                  {brands.map((b,i) => {
-                    const tot = b.products.reduce((s,p) => s+p.materialIds.length, 0);
-                    return <FolderRow key={b.id} icon={icoFolder} title={b.name} sub={b.products.length+" product"+(b.products.length!==1?"s":"")+" . "+tot+" material"+(tot!==1?"s":"")} onClick={() => goBrand(b.id)} last={i===brands.length-1 && !addingBrand} />;
-                  })}
-                  {addingBrand && <AddRow placeholder="Brand name..." onAdd={addBrand} onCancel={() => setAddingBrand(false)} />}
-                </div>
-              </Level>
-            )}
-
-            {/* L2: products */}
-            {curBrand && !curProduct && (
-              <Level title={curBrand.name} count={curBrand.products.length+" product"+(curBrand.products.length!==1?"s":"")}
+              <Level title="Products" count={products.filter(p => p.materialName !== "__placeholder__" || p.versions?.length > 0 || true).length + " product" + (products.length!==1?"s":"")}
                 action={<button onClick={() => setAddingProduct(true)} style={addBtn}><svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>}>
                 <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                  {curBrand.products.length===0 && !addingProduct && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
-                  {curBrand.products.map((p,i) => (
-                    <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={p.materialIds.length+" material"+(p.materialIds.length!==1?"s":"")} onClick={() => goProd(curBrand.id, p.id)} last={i===curBrand.products.length-1 && !addingProduct} />
-                  ))}
-                  {addingProduct && <AddRow placeholder="Product name..." onAdd={name => addProduct(curBrand.id, name)} onCancel={() => setAddingProduct(false)} />}
+                  {products.length===0 && !addingProduct && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
+                  {products.map((p,i) => {
+                    const realMats = p.materialIds.filter(id => !materials.find(m => m.id === id && m.materialName === "__placeholder__"));
+                    return <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={realMats.length+" material"+(realMats.length!==1?"s":"")} onClick={() => goProd(p.id)} last={i===products.length-1 && !addingProduct} />;
+                  })}
+                  {addingProduct && <AddRow placeholder="Product name..." onAdd={name => addProduct(name)} onCancel={() => setAddingProduct(false)} />}
                 </div>
               </Level>
             )}
 
-            {/* L3: materials */}
+            {/* L2: materials */}
             {curProduct && (
               <div>
                 <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
                   <FilterBar />
                   <button onClick={() => setShowNew(true)} style={addBtn}><svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Submission</button>
                 </div>
-                <MatTable rows={scopedMaterials.map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
-                <div style={{ fontSize:11.5, color:"#D1D5DB", marginTop:9, paddingLeft:2 }}>{scopedMaterials.length} material{scopedMaterials.length!==1?"s":""}</div>
+                <MatTable rows={scopedMaterials.filter(m => m.materialName !== "__placeholder__").map(m => ({ ...m, latest:m.versions[m.versions.length-1] })).filter(m => m.latest)} />
+                <div style={{ fontSize:11.5, color:"#D1D5DB", marginTop:9, paddingLeft:2 }}>{scopedMaterials.filter(m => m.materialName !== "__placeholder__").length} material{scopedMaterials.filter(m => m.materialName !== "__placeholder__").length!==1?"s":""}</div>
               </div>
             )}
             </>}
