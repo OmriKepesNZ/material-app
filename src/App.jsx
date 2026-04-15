@@ -820,15 +820,14 @@ export default function App() {
       .catch(err  => { console.error("Airtable load error:", err); setLoadError(err.message); setLoading(false); });
   }, []);
 
-  // ---- nav state ----
-  // Factory nav: null = product list, string = productId (inside a product)
+  //  nav state 
+  // Factory nav: null = product list  |  string productId = inside a product
   const [nav, setNav]                     = useState(null);
   const [addingProduct, setAddingProduct] = useState(false);
+  // Brand nav: null = product list  |  string productId = inside a product
+  const [bNav, setBNav]                   = useState(null);
 
-  // Brand nav: null | supplierId | {supplierId,seasonId} | {supplierId,seasonId,productId}
-  const [bNav, setBNav] = useState(null);
-
-  // ---- shared material state ----
+  //  shared material state 
   const [selected, setSelected]                   = useState(null);
   const [showNew, setShowNew]                     = useState(false);
   const [filters, setFilters]                     = useState({ type:"", status:"" });
@@ -836,146 +835,141 @@ export default function App() {
   const [showNewVersionFor, setShowNewVersionFor] = useState(null);
   const [search, setSearch]                       = useState("");
 
-  // ---- derive folder structures dynamically from Airtable materials ----
-  // Factory view: flat product list
+  //  derive product list from Airtable materials (no hardcoded folders) 
+  // Each unique styleName becomes one product folder.
+  // airtableProductId is stored on the material so we can link new submissions.
   const products = useMemo(() => {
     const map = {};
     materials.forEach(m => {
-      const p = m.styleName || "Unknown";
-      if (!map[p]) map[p] = { id:p, name:p, brand:m.brand||"", materialIds:[] };
-      map[p].materialIds.push(m.id);
+      const name = m.styleName || "Unknown";
+      if (!map[name]) map[name] = {
+        id:               name,
+        name,
+        airtableProductId: m.airtableProductId || null,
+        materialIds:      [],
+      };
+      // keep the first real airtableProductId we find
+      if (!map[name].airtableProductId && m.airtableProductId) {
+        map[name].airtableProductId = m.airtableProductId;
+      }
+      map[name].materialIds.push(m.id);
     });
     return Object.values(map);
   }, [materials]);
 
-  // Brand view: suppliers -> seasons -> products
-  const suppliers = useMemo(() => {
-    const map = {};
-    materials.forEach(m => {
-      const s  = m.factoryName || "Unknown Supplier";
-      const se = m.season      || "Unknown Season";
-      const p  = m.styleName   || "Unknown Product";
-      if (!map[s]) map[s] = { id:s, name:s, seasons:{} };
-      if (!map[s].seasons[se]) map[s].seasons[se] = { id:s+"__"+se, name:se, products:{} };
-      if (!map[s].seasons[se].products[p]) map[s].seasons[se].products[p] = { id:s+"__"+se+"__"+p, name:p, materialIds:[] };
-      map[s].seasons[se].products[p].materialIds.push(m.id);
-    });
-    return Object.values(map).map(s => ({
-      ...s, seasons:Object.values(s.seasons).map(se => ({ ...se, products:Object.values(se.products) }))
-    }));
-  }, [materials]);
+  //  derived nav objects 
+  // Factory: nav is the product name string (used as id)
+  const curProduct = nav ? products.find(p => p.id === nav) : null;
+  // Brand: bNav is the product name string
+  const curBProduct = bNav ? products.find(p => p.id === bNav) : null;
 
-  // ---- derived nav objects ----
-  const curProduct  = nav ? products.find(p => p.id === nav) : null;
-  const curSupplier = bNav ? suppliers.find(s => s.id === (typeof bNav === "string" ? bNav : bNav.supplierId)) : null;
-  const curSeason   = (bNav && bNav.seasonId && curSupplier) ? curSupplier.seasons.find(s => s.id === bNav.seasonId) : null;
-  const curBProd    = (bNav && bNav.productId && curSeason)  ? curSeason.products.find(p => p.id === bNav.productId) : null;
-
-  // ---- scoped materials ----
+  //  scoped materials 
   const scopedMaterials = curProduct
     ? materials.filter(m => curProduct.materialIds.includes(m.id))
-    : curBProd
-    ? materials.filter(m => curBProd.materialIds.includes(m.id))
+    : curBProduct
+    ? materials.filter(m => curBProduct.materialIds.includes(m.id))
     : materials;
-  const allStyles       = [...new Set(materials.map(m => m.styleName).filter(Boolean))];
-  const selectedMaterial = selected ? (scopedMaterials.find(m => m.id === selected) || materials.find(m => m.id === selected)) : null;
 
-  // ---- nav helpers: factory ----
-  function goHome()         { setNav(null); setSelected(null); setAddingProduct(false); }
-  function goProd(productId){ setNav(productId); setSelected(null); setFilters({ type:"", status:"" }); }
+  const allStyles = [...new Set(materials.filter(m => m.materialName !== "__empty__").map(m => m.styleName).filter(Boolean))];
+  const selectedMaterial = selected ? materials.find(m => m.id === selected) : null;
 
-  // ---- nav helpers: brand pro ----
-  function bHome()           { setBNav(null);   setSelected(null); setSearch(""); }
-  function bSupplier(sid)    { setBNav(sid);    setSelected(null); setSearch(""); }
-  function bSeason(sid, ssid){ setBNav({ supplierId:sid, seasonId:ssid }); setSelected(null); setSearch(""); }
-  function bProd(sid, ssid, pid){ setBNav({ supplierId:sid, seasonId:ssid, productId:pid }); setSelected(null); setFilters({ type:"", status:"" }); setSearch(""); }
+  //  nav helpers 
+  function goHome()       { setNav(null);  setSelected(null); setAddingProduct(false); }
+  function goProd(id)     { setNav(id);    setSelected(null); setFilters({ type:"", status:"" }); }
+  function bGoHome()      { setBNav(null); setSelected(null); setSearch(""); }
+  function bGoProd(id)    { setBNav(id);   setSelected(null); setFilters({ type:"", status:"" }); setSearch(""); }
 
-  // ---- mutators ----
+  //  mutators 
+
+  // Add a new product: creates Airtable Products record, optimistically adds to local state
   async function addProduct(name) {
-    // 1. Create the Product record in Airtable
-    const created = await createRecord("Products", { "Product Name": name });
-    const airtableProductId = created.id;
-    // 2. Optimistically add a placeholder material so the product folder appears
-    //    immediately (it will be replaced on next full reload)
-    const placeholder = {
-      id: "new__" + Date.now(),
-      airtableId: null,
-      airtableProductId,
-      styleName: name,
-      brand: "",
-      season: "",
-      factoryName: "",
-      materialType: "",
-      materialName: "__placeholder__",
-      versions: [],
-    };
-    setMaterials(p => [...p, placeholder]);
     setAddingProduct(false);
+    try {
+      const created = await createRecord("Products", { "Product Name": name });
+      // Add a sentinel material so the product folder is immediately visible
+      const sentinel = {
+        id:                "sentinel__" + created.id,
+        airtableId:        null,
+        airtableProductId: created.id,
+        styleName:         name,
+        brand:             "",
+        season:            "",
+        factoryName:       "",
+        materialType:      "",
+        materialName:      "__empty__",
+        versions:          [],
+      };
+      setMaterials(p => [...p, sentinel]);
+    } catch(err) {
+      console.error("Failed to create product:", err);
+    }
   }
 
+  // Add a new submission: creates Airtable Materials + Submissions records
   async function addMaterial(data) {
-    const productName = curProduct ? curProduct.name : "New Style";
-    // Find the Airtable Product record ID for the current product
-    // We look for any material in this product that has an airtableProductId,
-    // or fall back to searching by styleName match
-    const existingMat = materials.find(m => m.styleName === productName && m.airtableId);
-    // Get product airtable ID  stored on placeholder or derived from existing material's product link
-    const airtableProductId = curProduct?.airtableProductId
-      || materials.find(m => m.styleName === productName && m.airtableProductId)?.airtableProductId
-      || null;
+    const productName     = curProduct?.name || "Unknown";
+    const airtableProductId = curProduct?.airtableProductId || null;
 
-    // 1. Create Material record in Airtable
-    const matFields = {
-      "Material Name": data.materialName,
-      "Type":          data.materialType,
-      "Supplier":      data.factoryName || "",
-    };
-    if (airtableProductId) matFields["Product"] = [airtableProductId];
+    try {
+      // 1. Create Material in Airtable
+      const matFields = {
+        "Material Name": data.materialName,
+        "Type":          data.materialType,
+        "Supplier":      data.factoryName || "",
+      };
+      if (airtableProductId) matFields["Product"] = [airtableProductId];
+      const createdMat = await createRecord("Materials", matFields);
 
-    const createdMat = await createRecord("Materials", matFields);
-    const matAirtableId = createdMat.id;
+      // 2. Create Submission in Airtable
+      const subFields = {
+        "Material":        [createdMat.id],
+        "Version":         data.detectedVersion || 1,
+        "Submission Date": new Date().toISOString().slice(0, 10),
+        "Status":          "Pending",
+        "Shipment Status": data.shipmentStatus || "At Factory",
+      };
+      if (data.factoryNotes)   subFields["Factory Notes"]   = data.factoryNotes;
+      if (data.extractedSpecs) subFields["Extracted Specs"] = data.extractedSpecs;
+      if (data.courier)        subFields["Courier"]         = data.courier;
+      if (data.trackingNumber) subFields["Tracking Number"] = data.trackingNumber;
+      const createdSub = await createRecord("Submissions", subFields);
 
-    // 2. Create Submission record in Airtable
-    const subFields = {
-      "Material":        [matAirtableId],
-      "Version":         data.detectedVersion || 1,
-      "Submission Date": new Date().toISOString().slice(0, 10),
-      "Factory Notes":   data.factoryNotes || "",
-      "Extracted Specs": data.extractedSpecs || "",
-      "Status":          "Pending",
-      "Courier":         data.courier || "",
-      "Tracking Number": data.trackingNumber || "",
-      "Shipment Status": data.shipmentStatus || "At Factory",
-    };
-    const createdSub = await createRecord("Submissions", subFields);
+      // 3. Build local material object with real Airtable IDs
+      const nm = {
+        id:                createdMat.id,
+        airtableId:        createdMat.id,
+        airtableProductId: airtableProductId,
+        styleName:         productName,
+        brand:             curProduct?.brand  || "",
+        season:            data.season        || "",
+        factoryName:       data.factoryName   || "",
+        materialType:      data.materialType,
+        materialName:      data.materialName,
+        versions: [{
+          airtableId:     createdSub.id,
+          version:        data.detectedVersion || 1,
+          submissionDate: new Date().toISOString().slice(0, 10),
+          image:          data.image           || null,
+          factoryNotes:   data.factoryNotes    || "",
+          extractedSpecs: data.extractedSpecs  || "",
+          status:         "Pending",
+          brandComment:   "",
+          approvalDate:   null,
+          courier:        data.courier         || "",
+          trackingNumber: data.trackingNumber  || "",
+          shipmentStatus: data.shipmentStatus  || "At Factory",
+        }],
+      };
 
-    // 3. Update local state
-    const nm = {
-      id:           matAirtableId,
-      airtableId:   matAirtableId,
-      styleName:    productName,
-      brand:        curProduct?.brand || "",
-      season:       data.season || "",
-      factoryName:  data.factoryName || "",
-      materialType: data.materialType,
-      materialName: data.materialName,
-      versions: [{
-        airtableId:     createdSub.id,
-        version:        data.detectedVersion || 1,
-        submissionDate: new Date().toISOString().slice(0, 10),
-        image:          data.image,
-        factoryNotes:   data.factoryNotes || "",
-        extractedSpecs: data.extractedSpecs || "",
-        status:         "Pending",
-        brandComment:   "",
-        approvalDate:   null,
-        courier:        data.courier || "",
-        trackingNumber: data.trackingNumber || "",
-        shipmentStatus: data.shipmentStatus || "At Factory",
-      }],
-    };
-    // Remove placeholder for this product if present, add real material
-    setMaterials(p => [...p.filter(m => !(m.styleName === productName && m.materialName === "__placeholder__")), nm]);
+      // 4. Remove sentinel for this product (if exists), add real material
+      setMaterials(p => [
+        ...p.filter(m => m.materialName !== "__empty__" || m.styleName !== productName),
+        nm,
+      ]);
+    } catch(err) {
+      console.error("Failed to create submission:", err);
+      alert("Could not save submission. Check console for details.");
+    }
   }
   async function handleApprove() {
     const mat    = materials.find(m => m.id === selected);
@@ -1209,10 +1203,8 @@ export default function App() {
 
             {view === "brand" && (
               <>
-                <BCBtn label="Approvals" dim={!!bNav} onClick={bHome} />
-                {curSupplier && <><BCSep/><BCBtn label={curSupplier.name} dim={!!curSeason}   onClick={() => bSupplier(curSupplier.id)} /></>}
-                {curSeason   && <><BCSep/><BCBtn label={curSeason.name}   dim={!!curBProd}    onClick={() => bSeason(curSupplier.id, curSeason.id)} /></>}
-                {curBProd    && <><BCSep/><BCBtn label={curBProd.name}    dim={false}         onClick={null} /></>}
+                <BCBtn label="Approvals" dim={!!bNav} onClick={bGoHome} />
+                {curBProduct && <><BCSep/><BCBtn label={curBProduct.name} dim={false} onClick={null} /></>}
               </>
             )}
           </div>
@@ -1223,130 +1215,90 @@ export default function App() {
       {/* ===== PAGE CONTENT ===== */}
       <div style={{ maxWidth:1400, margin:"0 auto", padding:"24px clamp(16px, 3vw, 48px)" }}>
 
-        {/* ---- FACTORY VIEW ---- */}
+        {/* ---- FACTORY VIEW: products -> submissions ---- */}
         {view === "factory" && (
           <>
-            {/* Factory search - always visible */}
-            <div style={{ position:"relative", marginBottom:20 }}>
-              <svg style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search materials, products, brands..."
-                style={{ width:"100%", padding:"10px 12px 10px 34px", border:"1px solid #E5E7EB", borderRadius:9, fontSize:13, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none" }} />
-              {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"#9CA3AF", padding:2 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>}
-            </div>
+            {/* Search bar */}
+            <SearchBar search={search} setSearch={setSearch} placeholder="Search materials, products..." />
 
-            {/* Factory search results */}
-            {searchResults !== null && (
-              <div>
-                <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
-                  {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
-                </div>
-                <MatTable rows={searchResults} showContext />
-              </div>
-            )}
+            {searchResults !== null
+              ? (<div>
+                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
+                    {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
+                  </div>
+                  <MatTable rows={searchResults} showContext />
+                 </div>)
+              : <>
+                  {/* L1: product list */}
+                  {!nav && (
+                    <Level title="Products" count={products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length + " product" + (products.length!==1?"s":"")}
+                      action={<button onClick={() => setAddingProduct(true)} style={addBtn}><svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>}>
+                      <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
+                        {products.length===0 && !addingProduct && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
+                        {products.map((p,i) => {
+                          const count = p.materialIds.filter(id => materials.find(m => m.id===id && m.materialName!=="__empty__")).length;
+                          return <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={count+" submission"+(count!==1?"s":"")} onClick={() => goProd(p.id)} last={i===products.length-1 && !addingProduct} />;
+                        })}
+                        {addingProduct && <AddRow placeholder="Product name..." onAdd={addProduct} onCancel={() => setAddingProduct(false)} />}
+                      </div>
+                    </Level>
+                  )}
 
-            {/* Folder nav when not searching */}
-            {searchResults === null && <>
-
-            {/* L1: products */}
-            {!nav && (
-              <Level title="Products" count={products.filter(p => p.materialName !== "__placeholder__" || p.versions?.length > 0 || true).length + " product" + (products.length!==1?"s":"")}
-                action={<button onClick={() => setAddingProduct(true)} style={addBtn}><svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>}>
-                <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                  {products.length===0 && !addingProduct && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
-                  {products.map((p,i) => {
-                    const realMats = p.materialIds.filter(id => !materials.find(m => m.id === id && m.materialName === "__placeholder__"));
-                    return <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={realMats.length+" material"+(realMats.length!==1?"s":"")} onClick={() => goProd(p.id)} last={i===products.length-1 && !addingProduct} />;
-                  })}
-                  {addingProduct && <AddRow placeholder="Product name..." onAdd={name => addProduct(name)} onCancel={() => setAddingProduct(false)} />}
-                </div>
-              </Level>
-            )}
-
-            {/* L2: materials */}
-            {curProduct && (
-              <div>
-                <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
-                  <FilterBar />
-                  <button onClick={() => setShowNew(true)} style={addBtn}><svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Submission</button>
-                </div>
-                <MatTable rows={scopedMaterials.filter(m => m.materialName !== "__placeholder__").map(m => ({ ...m, latest:m.versions[m.versions.length-1] })).filter(m => m.latest)} />
-                <div style={{ fontSize:11.5, color:"#D1D5DB", marginTop:9, paddingLeft:2 }}>{scopedMaterials.filter(m => m.materialName !== "__placeholder__").length} material{scopedMaterials.filter(m => m.materialName !== "__placeholder__").length!==1?"s":""}</div>
-              </div>
-            )}
-            </>}
+                  {/* L2: submissions inside a product */}
+                  {curProduct && (
+                    <div>
+                      <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
+                        <FilterBar />
+                        <button onClick={() => setShowNew(true)} style={addBtn}><svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Submission</button>
+                      </div>
+                      <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
+                      <div style={{ fontSize:11.5, color:"#D1D5DB", marginTop:9, paddingLeft:2 }}>{scopedMaterials.filter(m => m.materialName!=="__empty__").length} submission{scopedMaterials.filter(m=>m.materialName!=="__empty__").length!==1?"s":""}</div>
+                    </div>
+                  )}
+                </>
+            }
           </>
         )}
 
-        {/* ---- BRAND VIEW (always pro) ---- */}
+        {/* ---- BRAND VIEW: products -> submissions (read-only, approve/reject) ---- */}
         {view === "brand" && (
           <>
-            {/* Search - always visible */}
-            <div style={{ position:"relative", marginBottom:20 }}>
-              <svg style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search materials, products, suppliers, seasons..."
-                style={{ width:"100%", padding:"10px 12px 10px 34px", border:"1px solid #E5E7EB", borderRadius:9, fontSize:13, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none" }} />
-              {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"#9CA3AF", padding:2 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>}
-            </div>
+            {/* Search bar */}
+            <SearchBar search={search} setSearch={setSearch} placeholder="Search materials, products..." />
 
-            {/* Search results */}
-            {searchResults !== null && (
-              <div>
-                <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
-                  {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
-                </div>
-                <MatTable rows={searchResults} showContext />
-              </div>
-            )}
-
-            {/* Folder nav when not searching */}
-            {searchResults === null && (
-              <>
-                {/* L1: suppliers */}
-                {!bNav && (
-                  <Level title="Suppliers" count={suppliers.length+" supplier"+(suppliers.length!==1?"s":"")}>
-                    <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                      {suppliers.map((s,i) => {
-                        const mats = s.seasons.reduce((a,se) => a+se.products.reduce((b,p) => b+p.materialIds.length,0),0);
-                        return <FolderRow key={s.id} icon={icoFactory} title={s.name} sub={s.seasons.length+" season"+(s.seasons.length!==1?"s":"")+" . "+mats+" material"+(mats!==1?"s":"")} onClick={() => bSupplier(s.id)} last={i===suppliers.length-1} />;
-                      })}
-                    </div>
-                  </Level>
-                )}
-
-                {/* L2: seasons */}
-                {curSupplier && !curSeason && (
-                  <Level title={curSupplier.name} count={curSupplier.seasons.length+" season"+(curSupplier.seasons.length!==1?"s":"")}>
-                    <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                      {curSupplier.seasons.map((se,i) => {
-                        const mats = se.products.reduce((a,p) => a+p.materialIds.length,0);
-                        return <FolderRow key={se.id} icon={icoCal} title={se.name} sub={se.products.length+" product"+(se.products.length!==1?"s":"")+" . "+mats+" material"+(mats!==1?"s":"")} onClick={() => bSeason(curSupplier.id, se.id)} last={i===curSupplier.seasons.length-1} />;
-                      })}
-                    </div>
-                  </Level>
-                )}
-
-                {/* L3: products */}
-                {curSeason && !curBProd && (
-                  <Level title={curSeason.name} count={curSeason.products.length+" product"+(curSeason.products.length!==1?"s":"")}>
-                    <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                      {curSeason.products.map((p,i) => (
-                        <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={p.materialIds.length+" material"+(p.materialIds.length!==1?"s":"")} onClick={() => bProd(curSupplier.id, curSeason.id, p.id)} last={i===curSeason.products.length-1} />
-                      ))}
-                    </div>
-                  </Level>
-                )}
-
-                {/* L4: materials */}
-                {curBProd && (
-                  <div>
-                    <div style={{ display:"flex", gap:7, marginBottom:14 }}><FilterBar /></div>
-                    <MatTable rows={scopedMaterials.map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
+            {searchResults !== null
+              ? (<div>
+                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
+                    {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
                   </div>
-                )}
-              </>
-            )}
+                  <MatTable rows={searchResults} showContext />
+                 </div>)
+              : <>
+                  {/* L1: product list */}
+                  {!bNav && (
+                    <Level title="Products" count={products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length + " product" + (products.length!==1?"s":"")}>
+                      <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
+                        {products.length===0 && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
+                        {products.map((p,i) => {
+                          const count = p.materialIds.filter(id => materials.find(m => m.id===id && m.materialName!=="__empty__")).length;
+                          const pending = p.materialIds.filter(id => { const m = materials.find(x => x.id===id); return m && m.versions.length > 0 && m.versions[m.versions.length-1].status === "Pending"; }).length;
+                          return <FolderRow key={p.id} icon={icoProduct} title={p.name}
+                            sub={count+" submission"+(count!==1?"s":"")+(pending>0?" . "+pending+" pending":"")}
+                            onClick={() => bGoProd(p.id)} last={i===products.length-1} />;
+                        })}
+                      </div>
+                    </Level>
+                  )}
+
+                  {/* L2: submissions inside a product */}
+                  {curBProduct && (
+                    <div>
+                      <div style={{ display:"flex", gap:7, marginBottom:14 }}><FilterBar /></div>
+                      <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
+                    </div>
+                  )}
+                </>
+            }
           </>
         )}
       </div>
@@ -1391,6 +1343,27 @@ export default function App() {
 
       {/* Bottom padding so content doesn't hide behind toggle */}
       <div style={{ height:80 }} />
+    </div>
+  );
+}
+
+function SearchBar({ search, setSearch, placeholder }) {
+  return (
+    <div style={{ position:"relative", marginBottom:20 }}>
+      <svg style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder={placeholder}
+        style={{ width:"100%", padding:"10px 12px 10px 34px", border:"1px solid #E5E7EB", borderRadius:9, fontSize:13, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none" }} />
+      {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"#9CA3AF", padding:2 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>}
+    </div>
+  );
+}
+
+function SearchResults({ results, search }) {
+  return (
+    <div>
+      <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
+        {results.length} result{results.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
+      </div>
     </div>
   );
 }

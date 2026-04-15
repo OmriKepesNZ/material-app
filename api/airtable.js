@@ -89,13 +89,15 @@ async function handleGET() {
       .sort((a, b) => a.fields[F_SUB_VERSION] - b.fields[F_SUB_VERSION]);
 
     return {
-      id:           mat.id,
-      airtableId:   mat.id,
-      styleName:    product?.fields[F_PRODUCT_NAME]   || "",
-      season:       product?.fields[F_PRODUCT_SEASON] || "",
-      factoryName:  mat.fields[F_MAT_SUPPLIER]        || "",
-      materialType: mat.fields[F_MAT_TYPE]            || "",
-      materialName: mat.fields[F_MAT_NAME]            || "",
+      id:                mat.id,
+      airtableId:        mat.id,
+      airtableProductId: mat.fields[F_MAT_PRODUCT]?.[0] || null,
+      styleName:         product?.fields[F_PRODUCT_NAME]   || "",
+      brand:             product?.fields[F_PRODUCT_BRAND]  || "",
+      season:            product?.fields[F_PRODUCT_SEASON] || "",
+      factoryName:       mat.fields[F_MAT_SUPPLIER]        || "",
+      materialType:      mat.fields[F_MAT_TYPE]            || "",
+      materialName:      mat.fields[F_MAT_NAME]            || "",
       versions: subs.map(sub => ({
         airtableId:     sub.id,
         version:        sub.fields[F_SUB_VERSION]          || 1,
