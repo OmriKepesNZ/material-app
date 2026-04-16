@@ -1,7 +1,7 @@
 // src/airtable.js  --  client-side helper that talks to /api/airtable
 // =============================================================================
 
-const API = "/api/airtable";
+const API = "/api/airtable_server";
 
 export async function loadAllData() {
   const res = await fetch(API);
