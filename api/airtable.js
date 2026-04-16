@@ -83,7 +83,15 @@ async function handleGET() {
     subsByMat[matId].push(sub);
   }
 
-  return materialRecords.map(mat => {
+  // Track which products already have at least one material
+  const productIdsWithMaterials = new Set();
+  for (const mat of materialRecords) {
+    const pid = mat.fields[F_MAT_PRODUCT]?.[0];
+    if (pid) productIdsWithMaterials.add(pid);
+  }
+
+  // Build result: all materials (as before)
+  const result = materialRecords.map(mat => {
     const product = productsById[mat.fields[F_MAT_PRODUCT]?.[0]];
     const subs    = (subsByMat[mat.id] || [])
       .sort((a, b) => a.fields[F_SUB_VERSION] - b.fields[F_SUB_VERSION]);
@@ -114,6 +122,27 @@ async function handleGET() {
       })),
     };
   });
+
+  // Add sentinel entries for products that have NO materials yet,
+  // so empty product folders survive a refresh.
+  for (const p of productRecords) {
+    if (!productIdsWithMaterials.has(p.id)) {
+      result.push({
+        id:                "sentinel__" + p.id,
+        airtableId:        null,
+        airtableProductId: p.id,
+        styleName:         p.fields[F_PRODUCT_NAME]   || "",
+        brand:             "",
+        season:            p.fields[F_PRODUCT_SEASON] || "",
+        factoryName:       "",
+        materialType:      "",
+        materialName:      "__empty__",
+        versions:          [],
+      });
+    }
+  }
+
+  return result;
 }
 
 async function handlePATCH(body) {
