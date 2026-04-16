@@ -911,22 +911,7 @@ export default function App() {
     const airtableProductId = curProduct?.airtableProductId || null;
 
     try {
-      // 1. Upload image to get a public URL (Airtable requires a URL, not base64)
-      let photoUrl = null;
-      if (data.image && data.image.startsWith("data:")) {
-        try {
-          photoUrl = await uploadImage(
-            data.image,
-            `${productName}_${data.materialName}_v${data.detectedVersion || 1}.jpg`
-          );
-        } catch (imgErr) {
-          console.warn("Image upload failed, continuing without photo:", imgErr);
-        }
-      } else if (data.image) {
-        photoUrl = data.image; // already a URL
-      }
-
-      // 2. Create Material in Airtable
+      // 1. Create Material in Airtable FIRST (never blocked by image upload)
       const matFields = {
         "Material Name": data.materialName,
         "Type":          data.materialType,
@@ -935,7 +920,7 @@ export default function App() {
       if (airtableProductId) matFields["Product"] = [airtableProductId];
       const createdMat = await createRecord("Materials", matFields);
 
-      // 3. Create Submission in Airtable
+      // 2. Create Submission record (no photo yet)
       const subFields = {
         "Material":        [createdMat.id],
         "Version":         data.detectedVersion || 1,
@@ -943,14 +928,14 @@ export default function App() {
         "Status":          "Pending",
         "Shipment Status": data.shipmentStatus || "At Factory",
       };
-      if (photoUrl)            subFields["Photo"]          = [{ url: photoUrl }];
       if (data.factoryNotes)   subFields["Factory Notes"]   = data.factoryNotes;
       if (data.extractedSpecs) subFields["Extracted Specs"] = data.extractedSpecs;
       if (data.courier)        subFields["Courier"]         = data.courier;
       if (data.trackingNumber) subFields["Tracking Number"] = data.trackingNumber;
       const createdSub = await createRecord("Submissions", subFields);
 
-      // 4. Build local material object with real Airtable IDs
+      // 3. Add to local state immediately so it shows in the app
+      const localImage = data.image || null; // use base64 locally for instant display
       const nm = {
         id:                createdMat.id,
         airtableId:        createdMat.id,
@@ -965,7 +950,7 @@ export default function App() {
           airtableId:     createdSub.id,
           version:        data.detectedVersion || 1,
           submissionDate: new Date().toISOString().slice(0, 10),
-          image:          photoUrl || data.image || null,
+          image:          localImage,
           factoryNotes:   data.factoryNotes    || "",
           extractedSpecs: data.extractedSpecs  || "",
           status:         "Pending",
@@ -976,12 +961,28 @@ export default function App() {
           shipmentStatus: data.shipmentStatus  || "At Factory",
         }],
       };
-
-      // 5. Remove sentinel for this product (if exists), add real material
       setMaterials(p => [
         ...p.filter(m => m.materialName !== "__empty__" || m.styleName !== productName),
         nm,
       ]);
+
+      // 4. Upload image separately — best-effort, patches submission after creation
+      if (data.image && data.image.startsWith("data:")) {
+        uploadImage(
+          data.image,
+          `${productName}_${data.materialName}_v${data.detectedVersion || 1}.jpg`
+        ).then(photoUrl => {
+          // Patch Airtable submission with the photo URL
+          updateRecord("Submissions", createdSub.id, { "Photo": [{ url: photoUrl }] })
+            .catch(e => console.warn("Photo patch failed:", e));
+          // Update local state so thumbnail shows the hosted URL (not base64)
+          setMaterials(p => p.map(m => m.id !== createdMat.id ? m : {
+            ...m,
+            versions: m.versions.map(v => v.airtableId !== createdSub.id ? v : { ...v, image: photoUrl }),
+          }));
+        }).catch(e => console.warn("Image upload failed (record still saved):", e));
+      }
+
     } catch(err) {
       console.error("Failed to create submission:", err);
       alert("Could not save submission. Check console for details.");
@@ -1020,18 +1021,7 @@ export default function App() {
     const newVersion = mat ? mat.versions.length + 1 : 1;
     let   airtableId = null;
 
-    // Upload image first if it's a base64 data URI
-    let photoUrl = null;
-    if (nv.image && nv.image.startsWith("data:")) {
-      try {
-        photoUrl = await uploadImage(nv.image, `${mat?.materialName || "submission"}_v${newVersion}.jpg`);
-      } catch (imgErr) {
-        console.warn("Image upload failed, continuing without photo:", imgErr);
-      }
-    } else if (nv.image) {
-      photoUrl = nv.image;
-    }
-
+    // Create the submission record first (never blocked by image upload)
     if (mat?.airtableId) {
       const subFields = {
         "Material":        [mat.airtableId],
@@ -1043,13 +1033,26 @@ export default function App() {
         "Tracking Number": nv.trackingNumber,
         "Shipment Status": nv.trackingNumber ? "In Transit" : "At Factory",
       };
-      if (photoUrl) subFields["Photo"] = [{ url: photoUrl }];
       const created = await createRecord("Submissions", subFields);
       airtableId = created.id;
+
+      // Upload image separately after record is saved
+      if (nv.image && nv.image.startsWith("data:") && airtableId) {
+        uploadImage(nv.image, `${mat.materialName}_v${newVersion}.jpg`)
+          .then(photoUrl => {
+            updateRecord("Submissions", airtableId, { "Photo": [{ url: photoUrl }] })
+              .catch(e => console.warn("Photo patch failed:", e));
+            setMaterials(p => p.map(m => m.id !== materialId ? m : { ...m,
+              versions: m.versions.map(v => v.airtableId !== airtableId ? v : { ...v, image: photoUrl }) }));
+          })
+          .catch(e => console.warn("Image upload failed (record still saved):", e));
+      }
     }
+
+    // Update local state immediately with base64 for instant display
     setMaterials(p => p.map(m => m.id !== materialId ? m : { ...m,
       versions:[...m.versions, { airtableId, version:newVersion, submissionDate:new Date().toISOString().slice(0,10),
-        image: photoUrl || nv.image, factoryNotes:nv.factoryNotes, status:"Pending", brandComment:"", approvalDate:null,
+        image: nv.image || null, factoryNotes:nv.factoryNotes, status:"Pending", brandComment:"", approvalDate:null,
         courier:nv.courier, trackingNumber:nv.trackingNumber, shipmentStatus:nv.trackingNumber ? "In Transit" : "At Factory" }] }));
     setShowNewVersionFor(null);
   }
