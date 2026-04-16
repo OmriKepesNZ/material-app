@@ -165,17 +165,37 @@ async function handlePOST(body) {
   return res.json();
 }
 
+// Upload a base64 image to Imgur (anonymous) and return its public URL.
+// Airtable requires a publicly accessible URL for attachment fields.
+async function handleImageUpload(body) {
+  const { imageBase64, filename } = body;
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+  const form = new URLSearchParams();
+  form.append("image", base64Data);
+  form.append("type", "base64");
+  if (filename) form.append("name", filename);
+
+  const res = await fetch("https://api.imgur.com/3/image", {
+    method: "POST",
+    headers: {
+      Authorization: "Client-ID 546c25a59c58ad7",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+
+  const data = await res.json();
+  if (!data.success) throw new Error("Image upload failed: " + JSON.stringify(data));
+  return { url: data.data.link };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-
-  // DEBUG -- remove after fixing
-  console.log("TOKEN present:", !!process.env.AIRTABLE_TOKEN);
-  console.log("TOKEN first 6:", process.env.AIRTABLE_TOKEN?.slice(0, 6) ?? "MISSING");
-  console.log("BASE_ID:", process.env.AIRTABLE_BASE_ID ?? "MISSING");
 
   try {
     if (req.method === "GET") {
@@ -187,6 +207,11 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
     if (req.method === "POST") {
+      // Route: image upload vs. normal record creation
+      if (req.body?.action === "uploadImage") {
+        const result = await handleImageUpload(req.body);
+        return res.status(200).json(result);
+      }
       const result = await handlePOST(req.body);
       return res.status(200).json(result);
     }

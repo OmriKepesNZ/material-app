@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { loadAllData, createRecord, updateRecord } from "./airtable";
+import { loadAllData, createRecord, updateRecord, uploadImage } from "./airtable";
 
 // --- Constants ----------------------------------------------------------------
 const MATERIAL_TYPES = ["Lab Dip", "Trim", "Fabric Swatch"];
@@ -907,11 +907,26 @@ export default function App() {
 
   // Add a new submission: creates Airtable Materials + Submissions records
   async function addMaterial(data) {
-    const productName     = curProduct?.name || "Unknown";
+    const productName       = curProduct?.name || "Unknown";
     const airtableProductId = curProduct?.airtableProductId || null;
 
     try {
-      // 1. Create Material in Airtable
+      // 1. Upload image to get a public URL (Airtable requires a URL, not base64)
+      let photoUrl = null;
+      if (data.image && data.image.startsWith("data:")) {
+        try {
+          photoUrl = await uploadImage(
+            data.image,
+            `${productName}_${data.materialName}_v${data.detectedVersion || 1}.jpg`
+          );
+        } catch (imgErr) {
+          console.warn("Image upload failed, continuing without photo:", imgErr);
+        }
+      } else if (data.image) {
+        photoUrl = data.image; // already a URL
+      }
+
+      // 2. Create Material in Airtable
       const matFields = {
         "Material Name": data.materialName,
         "Type":          data.materialType,
@@ -920,7 +935,7 @@ export default function App() {
       if (airtableProductId) matFields["Product"] = [airtableProductId];
       const createdMat = await createRecord("Materials", matFields);
 
-      // 2. Create Submission in Airtable
+      // 3. Create Submission in Airtable
       const subFields = {
         "Material":        [createdMat.id],
         "Version":         data.detectedVersion || 1,
@@ -928,13 +943,14 @@ export default function App() {
         "Status":          "Pending",
         "Shipment Status": data.shipmentStatus || "At Factory",
       };
+      if (photoUrl)            subFields["Photo"]          = [{ url: photoUrl }];
       if (data.factoryNotes)   subFields["Factory Notes"]   = data.factoryNotes;
       if (data.extractedSpecs) subFields["Extracted Specs"] = data.extractedSpecs;
       if (data.courier)        subFields["Courier"]         = data.courier;
       if (data.trackingNumber) subFields["Tracking Number"] = data.trackingNumber;
       const createdSub = await createRecord("Submissions", subFields);
 
-      // 3. Build local material object with real Airtable IDs
+      // 4. Build local material object with real Airtable IDs
       const nm = {
         id:                createdMat.id,
         airtableId:        createdMat.id,
@@ -949,7 +965,7 @@ export default function App() {
           airtableId:     createdSub.id,
           version:        data.detectedVersion || 1,
           submissionDate: new Date().toISOString().slice(0, 10),
-          image:          data.image           || null,
+          image:          photoUrl || data.image || null,
           factoryNotes:   data.factoryNotes    || "",
           extractedSpecs: data.extractedSpecs  || "",
           status:         "Pending",
@@ -961,7 +977,7 @@ export default function App() {
         }],
       };
 
-      // 4. Remove sentinel for this product (if exists), add real material
+      // 5. Remove sentinel for this product (if exists), add real material
       setMaterials(p => [
         ...p.filter(m => m.materialName !== "__empty__" || m.styleName !== productName),
         nm,
@@ -1003,8 +1019,21 @@ export default function App() {
     const mat        = materials.find(m => m.id === materialId);
     const newVersion = mat ? mat.versions.length + 1 : 1;
     let   airtableId = null;
+
+    // Upload image first if it's a base64 data URI
+    let photoUrl = null;
+    if (nv.image && nv.image.startsWith("data:")) {
+      try {
+        photoUrl = await uploadImage(nv.image, `${mat?.materialName || "submission"}_v${newVersion}.jpg`);
+      } catch (imgErr) {
+        console.warn("Image upload failed, continuing without photo:", imgErr);
+      }
+    } else if (nv.image) {
+      photoUrl = nv.image;
+    }
+
     if (mat?.airtableId) {
-      const created = await createRecord("Submissions", {
+      const subFields = {
         "Material":        [mat.airtableId],
         "Version":         newVersion,
         "Submission Date": new Date().toISOString().slice(0, 10),
@@ -1013,12 +1042,14 @@ export default function App() {
         "Courier":         nv.courier,
         "Tracking Number": nv.trackingNumber,
         "Shipment Status": nv.trackingNumber ? "In Transit" : "At Factory",
-      });
+      };
+      if (photoUrl) subFields["Photo"] = [{ url: photoUrl }];
+      const created = await createRecord("Submissions", subFields);
       airtableId = created.id;
     }
     setMaterials(p => p.map(m => m.id !== materialId ? m : { ...m,
       versions:[...m.versions, { airtableId, version:newVersion, submissionDate:new Date().toISOString().slice(0,10),
-        image:nv.image, factoryNotes:nv.factoryNotes, status:"Pending", brandComment:"", approvalDate:null,
+        image: photoUrl || nv.image, factoryNotes:nv.factoryNotes, status:"Pending", brandComment:"", approvalDate:null,
         courier:nv.courier, trackingNumber:nv.trackingNumber, shipmentStatus:nv.trackingNumber ? "In Transit" : "At Factory" }] }));
     setShowNewVersionFor(null);
   }
@@ -1093,8 +1124,13 @@ export default function App() {
                   <td style={{ padding:"11px 14px", fontSize:12, color:"#9CA3AF" }}>{m.materialType}</td>
                   <td style={{ padding:"11px 14px" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:9 }}>
-                      {m.latest.image ? <img src={m.latest.image} style={{ width:28, height:28, objectFit:"cover", borderRadius:6, border:"1px solid #E5E7EB", flexShrink:0 }} alt="" /> : <div style={{ width:28, height:28, borderRadius:6, border:"1.5px dashed #E5E7EB", background:"#FAFAFA", flexShrink:0 }} />}
-                      <span style={{ fontSize:13, fontWeight:500 }}>{m.materialName}</span>
+                      {m.latest.image
+                        ? <img src={m.latest.image} style={{ width:36, height:36, objectFit:"cover", borderRadius:7, border:"1px solid #E5E7EB", flexShrink:0 }} alt="" />
+                        : <div style={{ width:36, height:36, borderRadius:7, border:"1.5px dashed #E5E7EB", background:"#F3F4F6", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                          </div>
+                      }
+                      <span style={{ fontSize:13, fontWeight:500, textAlign:"left" }}>{m.materialName}</span>
                     </div>
                   </td>
                   <td style={{ padding:"11px 14px" }}><span style={{ padding:"1px 7px", background:"#F3F4F6", borderRadius:4, fontSize:11, fontWeight:700, color:"#374151", fontFamily:"monospace" }}>V{m.latest.version}</span></td>
@@ -1186,7 +1222,7 @@ export default function App() {
 
       {/* ===== NAV BAR ===== */}
       <div style={{ background:"#fff", borderBottom:"1px solid #EFEFEF" }}>
-        <div style={{ maxWidth:1400, margin:"0 auto", height:52, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 clamp(16px, 3vw, 48px)" }}>
+        <div style={{ maxWidth:900, margin:"0", height:52, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 clamp(16px, 3vw, 32px)" }}>
 
           {/* Logo + breadcrumb */}
           <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
@@ -1213,7 +1249,7 @@ export default function App() {
       </div>
 
       {/* ===== PAGE CONTENT ===== */}
-      <div style={{ maxWidth:1400, margin:"0 auto", padding:"24px clamp(16px, 3vw, 48px)" }}>
+      <div style={{ maxWidth:900, margin:"0", padding:"24px clamp(16px, 3vw, 32px)" }}>
 
         {/* ---- FACTORY VIEW: products -> submissions ---- */}
         {view === "factory" && (
