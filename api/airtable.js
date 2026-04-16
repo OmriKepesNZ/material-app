@@ -93,7 +93,7 @@ async function handleGET() {
       airtableId:        mat.id,
       airtableProductId: mat.fields[F_MAT_PRODUCT]?.[0] || null,
       styleName:         product?.fields[F_PRODUCT_NAME]   || "",
-      brand:             product?.fields[F_PRODUCT_BRAND]  || "",
+      brand:             "",
       season:            product?.fields[F_PRODUCT_SEASON] || "",
       factoryName:       mat.fields[F_MAT_SUPPLIER]        || "",
       materialType:      mat.fields[F_MAT_TYPE]            || "",
