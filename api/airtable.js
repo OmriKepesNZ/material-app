@@ -155,6 +155,46 @@ async function handlePATCH(body) {
   return res.json();
 }
 
+async function handleDELETE(body) {
+  const { table, recordId } = body;
+  const res = await fetch(`${BASE}/${encodeURIComponent(table)}/${recordId}`, {
+    method:  "DELETE",
+    headers: atHeaders,
+  });
+  return res.json();
+}
+
+// Delete a product and all its materials + submissions
+async function handleDeleteProduct(body) {
+  const { productId } = body;
+
+  // 1. Find all materials linked to this product
+  const materialRecords = await fetchAll(TABLE_MATERIALS);
+  const linked = materialRecords.filter(m => m.fields[F_MAT_PRODUCT]?.[0] === productId);
+
+  // 2. For each material, delete all its submissions first
+  for (const mat of linked) {
+    const submissionRecords = await fetchAll(TABLE_SUBMISSIONS);
+    const subs = submissionRecords.filter(s => s.fields[F_SUB_MATERIAL]?.[0] === mat.id);
+    for (const sub of subs) {
+      await fetch(`${BASE}/${encodeURIComponent(TABLE_SUBMISSIONS)}/${sub.id}`, {
+        method: "DELETE", headers: atHeaders,
+      });
+    }
+    // 3. Delete the material itself
+    await fetch(`${BASE}/${encodeURIComponent(TABLE_MATERIALS)}/${mat.id}`, {
+      method: "DELETE", headers: atHeaders,
+    });
+  }
+
+  // 4. Delete the product record
+  await fetch(`${BASE}/${encodeURIComponent(TABLE_PRODUCTS)}/${productId}`, {
+    method: "DELETE", headers: atHeaders,
+  });
+
+  return { deleted: true, productId };
+}
+
 async function handlePOST(body) {
   const { table, fields } = body;
   const res = await fetch(`${BASE}/${encodeURIComponent(table)}`, {
@@ -208,12 +248,19 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
     if (req.method === "POST") {
-      // Route: image upload vs. normal record creation
       if (req.body?.action === "uploadImage") {
         const result = await handleImageUpload(req.body);
         return res.status(200).json(result);
       }
+      if (req.body?.action === "deleteProduct") {
+        const result = await handleDeleteProduct(req.body);
+        return res.status(200).json(result);
+      }
       const result = await handlePOST(req.body);
+      return res.status(200).json(result);
+    }
+    if (req.method === "DELETE") {
+      const result = await handleDELETE(req.body);
       return res.status(200).json(result);
     }
     return res.status(405).json({ error: "Method not allowed" });

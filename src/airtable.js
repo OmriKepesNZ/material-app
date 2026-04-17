@@ -47,3 +47,15 @@ export async function uploadImage(imageBase64, filename = "submission.jpg") {
   const data = await res.json();
   return data.url; // public https URL
 }
+
+export async function deleteProduct(productId) {
+  const res = await fetch("/api/airtable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "deleteProduct", productId }),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(`Delete error: ${data.error}`);
+  return data;
+}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { loadAllData, createRecord, updateRecord, uploadImage } from "./airtable";
+import { loadAllData, createRecord, updateRecord, uploadImage, deleteProduct } from "./airtable";
 
 // --- Constants ----------------------------------------------------------------
 const MATERIAL_TYPES = ["Lab Dip", "Trim", "Fabric Swatch"];
@@ -1058,8 +1058,40 @@ export default function App() {
     setShowNewVersionFor(null);
   }
 
-  // ---- search (pro brand) ----
-  const allMats = materials.map(m => ({ ...m, latest: m.versions[m.versions.length-1] }));
+  // Delete a product and all its materials/submissions
+  async function handleDeleteProduct(productId) {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    const hasSubmissions = product.materialIds.some(id => {
+      const m = materials.find(x => x.id === id);
+      return m && m.materialName !== "__empty__" && m.versions.length > 0;
+    });
+
+    const confirmed = hasSubmissions
+      ? window.confirm(`Delete "${product.name}" and all its submissions? This cannot be undone.`)
+      : window.confirm(`Delete "${product.name}"?`);
+    if (!confirmed) return;
+
+    try {
+      const airtableProductId = product.airtableProductId;
+      if (airtableProductId) {
+        await deleteProduct(airtableProductId);
+      }
+      // Remove from local state
+      setMaterials(p => p.filter(m => !product.materialIds.includes(m.id)));
+      // If we're navigated inside this product, go home
+      if (nav === productId) setNav(null);
+    } catch(err) {
+      console.error("Delete failed:", err);
+      alert("Could not delete product: " + err.message);
+    }
+  }
+
+  // ---- search ----
+  const allMats = materials
+    .filter(m => m.materialName !== "__empty__" && m.versions.length > 0)
+    .map(m => ({ ...m, latest: m.versions[m.versions.length-1] }));
   const searchResults = search.trim().length > 1
     ? allMats.filter(m => {
         const q = search.toLowerCase();
@@ -1068,7 +1100,7 @@ export default function App() {
           || m.styleName.toLowerCase().includes(q)
           || m.factoryName.toLowerCase().includes(q)
           || (m.season && m.season.toLowerCase().includes(q))
-          || m.latest.status.toLowerCase().includes(q);
+          || (m.latest?.status || "").toLowerCase().includes(q);
       })
     : null;
 
@@ -1150,7 +1182,7 @@ export default function App() {
   }
 
   // ---- folder row ----
-  function FolderRow({ icon, title, sub, onClick, last }) {
+  function FolderRow({ icon, title, sub, onClick, last, onDelete }) {
     return (
       <div className="frow" onClick={onClick}
         style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"13px 18px", borderBottom:last?"none":"1px solid #F3F4F6", background:"#fff", transition:"background 0.08s" }}>
@@ -1161,7 +1193,18 @@ export default function App() {
             {sub && <div style={{ fontSize:11.5, color:"#9CA3AF", marginTop:1 }}>{sub}</div>}
           </div>
         </div>
-        {chevron}
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {onDelete && (
+            <button
+              onClick={e => { e.stopPropagation(); onDelete(); }}
+              style={{ width:28, height:28, borderRadius:6, border:"1px solid #F3F4F6", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            </button>
+          )}
+          {chevron}
+        </div>
       </div>
     );
   }
@@ -1277,7 +1320,7 @@ export default function App() {
                         {products.length===0 && !addingProduct && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
                         {products.map((p,i) => {
                           const count = p.materialIds.filter(id => materials.find(m => m.id===id && m.materialName!=="__empty__")).length;
-                          return <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={count+" submission"+(count!==1?"s":"")} onClick={() => goProd(p.id)} last={i===products.length-1 && !addingProduct} />;
+                          return <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={count+" submission"+(count!==1?"s":"")} onClick={() => goProd(p.id)} last={i===products.length-1 && !addingProduct} onDelete={() => handleDeleteProduct(p.id)} />;
                         })}
                         {addingProduct && <AddRow placeholder="Product name..." onAdd={addProduct} onCancel={() => setAddingProduct(false)} />}
                       </div>
