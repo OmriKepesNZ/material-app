@@ -1,7 +1,7 @@
 // src/airtable.js  --  client-side helper that talks to /api/airtable
 // =============================================================================
 
-const API = "/api/airtable_server";
+const API = "/api/airtable";
 
 export async function loadAllData() {
   const res = await fetch(API);
@@ -16,7 +16,11 @@ export async function createRecord(table, fields) {
     body: JSON.stringify({ table, fields }),
   });
   if (!res.ok) throw new Error(`Create failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  // Airtable returns HTTP 200 even for field errors — check the body too
+  if (data.error) throw new Error(`Airtable error (${table}): ${data.error.message || JSON.stringify(data.error)}`);
+  if (!data.id)   throw new Error(`Airtable returned no record ID for table "${table}". Response: ${JSON.stringify(data)}`);
+  return data;
 }
 
 export async function updateRecord(table, recordId, fields) {
@@ -26,7 +30,9 @@ export async function updateRecord(table, recordId, fields) {
     body: JSON.stringify({ table, recordId, fields }),
   });
   if (!res.ok) throw new Error(`Update failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (data.error) throw new Error(`Airtable update error (${table}): ${data.error.message || JSON.stringify(data.error)}`);
+  return data;
 }
 
 // Upload a base64 image via the serverless function (which proxies to Imgur)

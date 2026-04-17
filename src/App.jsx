@@ -280,17 +280,18 @@ function NewSubmissionModal({ onClose, onSubmit, existingStyles, existingMateria
 
   function handleSubmit() {
     onSubmit({
-      styleName: resolvedStyle,
+      styleName:       resolvedStyle,
       materialType,
-      materialName: extracted?.materialName || "",
-      factoryNotes: notes,
+      materialName:    extracted?.materialName || "Unnamed",
+      factoryNotes:    notes,
       image,
       courier,
       trackingNumber,
-      shipmentStatus: trackingNumber ? "In Transit" : "At Factory",
-      season: "FW25",
-      factoryName: "Apex Textiles",
+      shipmentStatus:  trackingNumber ? "In Transit" : "At Factory",
+      season:          "",
+      factoryName:     "",
       detectedVersion: extracted?.version || 1,
+      extractedSpecs:  extracted?.extractedSpecs || "",
     });
     handleClose();
   }
