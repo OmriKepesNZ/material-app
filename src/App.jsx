@@ -1136,7 +1136,7 @@ export default function App() {
   function MatTable({ rows, showContext = false }) {
     const filtered = rows.filter(m => (!filters.type || m.materialType === filters.type) && (!filters.status || m.latest.status === filters.status));
     return (
-      <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
+      <div style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr style={{ borderBottom:"1px solid #F3F4F6", background:"#FAFAFA" }}>
@@ -1253,23 +1253,24 @@ export default function App() {
   );
 
   return (
-    <div style={{ fontFamily:"DM Sans, Helvetica Neue, sans-serif", background:"#F9FAFB", minHeight:"100vh", color:"#111827" }}>
+    <div style={{ fontFamily:"DM Sans, Helvetica Neue, sans-serif", background:"#F4F5F7", minHeight:"100vh", color:"#111827" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,650&family=DM+Mono:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=DM+Mono:wght@400;500;600&display=swap');
         * { box-sizing:border-box; margin:0; padding:0; }
         @keyframes spin { to { transform:rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
         ::-webkit-scrollbar { width:4px; }
-        ::-webkit-scrollbar-thumb { background:#E5E7EB; border-radius:2px; }
+        ::-webkit-scrollbar-thumb { background:#E2E5EA; border-radius:4px; }
         input:focus, select:focus, textarea:focus { outline:none; border-color:#111827 !important; }
-        .frow:hover { background:#F7F7F7 !important; cursor:pointer; }
-        .mrow:hover { background:#F5F5F5 !important; cursor:pointer; }
+        .prow { transition: box-shadow 0.15s, transform 0.15s, background 0.1s; cursor:pointer; }
+        .prow:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; transform: translateY(-1px); background:#fff !important; }
+        .mrow:hover { background:#F8F8FA !important; cursor:pointer; }
         select { appearance:none; }
       `}</style>
 
       {/* ===== NAV BAR ===== */}
-      <div style={{ background:"#fff", borderBottom:"1px solid #EFEFEF" }}>
-        <div style={{ maxWidth:900, height:52, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 24px" }}>
+      <div style={{ background:"#fff", borderBottom:"1px solid #E8EAED" }}>
+        <div style={{ maxWidth:960, height:56, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 28px" }}>
 
           {/* Logo + breadcrumb */}
           <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
@@ -1296,46 +1297,170 @@ export default function App() {
       </div>
 
       {/* ===== PAGE CONTENT ===== */}
-      <div style={{ maxWidth:900, padding:"24px 24px" }}>
+      <div style={{ maxWidth:960, padding:"28px 28px 100px" }}>
 
-        {/* ---- FACTORY VIEW: products -> submissions ---- */}
+        {/* ---- FACTORY VIEW ---- */}
         {view === "factory" && (
           <>
+            {!nav && searchResults === null && (
+              <>
+                {/* Dashboard header */}
+                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:24 }}>
+                  <div>
+                    <div style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.03em", color:"#0F1117", lineHeight:1.1 }}>Material Approvals</div>
+                    {(() => {
+                      const allReal = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                      const pending = allReal.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
+                      const prods   = products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length;
+                      const urgent  = allReal.filter(m => {
+                        const v = m.versions[m.versions.length-1];
+                        const days = v.submissionDate ? Math.floor((Date.now()-new Date(v.submissionDate))/(1000*60*60*24)) : 0;
+                        return v.status === "Pending" && days >= 5;
+                      }).length;
+                      return <div style={{ fontSize:13, color:"#8B909A", marginTop:5, fontWeight:500 }}>{pending} Pending · {prods} Product{prods!==1?"s":""}{urgent>0?` · ${urgent} Urgent`:""}</div>;
+                    })()}
+                  </div>
+                  <button onClick={() => setAddingProduct(true)} style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 18px", background:"#0F1117", color:"#fff", border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 2px 8px rgba(0,0,0,0.18)", letterSpacing:"-0.01em" }}>
+                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add Product
+                  </button>
+                </div>
+
+                {/* Summary stat cards */}
+                {(() => {
+                  const allReal = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                  const pending  = allReal.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
+                  const overdue  = allReal.filter(m => {
+                    const v = m.versions[m.versions.length-1];
+                    const days = v.submissionDate ? Math.floor((Date.now()-new Date(v.submissionDate))/(1000*60*60*24)) : 0;
+                    return v.status === "Pending" && days >= 5;
+                  }).length;
+                  const approved = allReal.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
+                  const cards = [
+                    { label:"Pending",           value:pending,  sub:"Pending",            icon:<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, bg:"#FFFBEB", ring:"#FDE68A", ic:"#FEF3C7" },
+                    { label:"Overdue",            value:overdue,  sub:"Overdue",            icon:<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, bg:"#FEF2F2", ring:"#FEE2E2", ic:"#FEE2E2" },
+                    { label:"Approved This Week", value:approved, sub:"Approved",           icon:<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>, bg:"#ECFDF5", ring:"#A7F3D0", ic:"#D1FAE5" },
+                  ];
+                  return (
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:28 }}>
+                      {cards.map(c => (
+                        <div key={c.label} style={{ background:"#fff", border:`1px solid ${c.ring}`, borderRadius:14, padding:"18px 20px", display:"flex", alignItems:"center", gap:14 }}>
+                          <div style={{ width:42, height:42, borderRadius:10, background:c.ic, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{c.icon}</div>
+                          <div>
+                            <div style={{ fontSize:13, fontWeight:600, color:"#6B7280", marginBottom:2 }}>{c.label}</div>
+                            <div style={{ fontSize:28, fontWeight:800, color:"#0F1117", letterSpacing:"-0.04em", lineHeight:1 }}>{c.value}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+
             {/* Search bar */}
-            <SearchBar search={search} setSearch={setSearch} placeholder="Search materials, products..." />
+            <SearchBar search={search} setSearch={setSearch} placeholder="Search products, materials, suppliers..." />
 
             {searchResults !== null
               ? (<div>
-                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
+                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
                     {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
                   </div>
                   <MatTable rows={searchResults} showContext />
                  </div>)
               : <>
-                  {/* L1: product list */}
+                  {/* L1: product cards */}
                   {!nav && (
-                    <Level title="Products" count={products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length + " product" + (products.length!==1?"s":"")}
-                      action={<button onClick={() => setAddingProduct(true)} style={addBtn}><svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Product</button>}>
-                      <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                        {products.length===0 && !addingProduct && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
-                        {products.map((p,i) => {
-                          const count = p.materialIds.filter(id => materials.find(m => m.id===id && m.materialName!=="__empty__")).length;
-                          return <FolderRow key={p.id} icon={icoProduct} title={p.name} sub={count+" submission"+(count!==1?"s":"")} onClick={() => goProd(p.id)} last={i===products.length-1 && !addingProduct} onDelete={() => handleDeleteProduct(p.id)} />;
+                    <div>
+                      {products.length===0 && !addingProduct && (
+                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
+                          <div style={{ fontSize:32, marginBottom:10 }}>🎉</div>
+                          <div style={{ fontWeight:700, fontSize:15, color:"#111827", marginBottom:6 }}>No products yet</div>
+                          <div style={{ color:"#9CA3AF", fontSize:13 }}>Add a product to start tracking material approvals</div>
+                        </div>
+                      )}
+                      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                        {products.map(p => {
+                          const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
+                          const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                          const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
+                          const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
+                          const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
+                          const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                          const latestSub = real.length > 0 ? real[real.length-1].versions.slice(-1)[0].submissionDate : null;
+                          const daysAgo = latestSub ? Math.floor((Date.now()-new Date(latestSub))/(1000*60*60*24)) : null;
+                          const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+                          const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
+                          const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
+                          return (
+                            <div key={p.id} className="prow"
+                              onClick={() => goProd(p.id)}
+                              style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:16, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
+                              {/* Thumbnail */}
+                              <div style={{ width:56, height:56, borderRadius:10, background:"#F3F4F6", flexShrink:0, overflow:"hidden", border:"1px solid #E8EAED", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                                {thumb
+                                  ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                                  : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                }
+                              </div>
+                              {/* Info */}
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                                  <span style={{ fontSize:15, fontWeight:700, color:"#0F1117", letterSpacing:"-0.02em" }}>{p.name}</span>
+                                  {dominantStatus && (
+                                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text, fontSize:11, fontWeight:600 }}>
+                                      <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />{dominantStatus}
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                                  {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
+                                  {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} pending</span></>}
+                                  {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>Updated {timeStr}</span></>}
+                                </div>
+                              </div>
+                              {/* Actions */}
+                              <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
+                                <button onClick={e => { e.stopPropagation(); handleDeleteProduct(p.id); }}
+                                  style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
+                                  onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
+                                  onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
+                                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                </button>
+                                <button onClick={e => { e.stopPropagation(); goProd(p.id); }}
+                                  style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", background:"#0F1117", color:"#fff", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                                  Review
+                                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                                </button>
+                              </div>
+                            </div>
+                          );
                         })}
-                        {addingProduct && <AddRow placeholder="Product name..." onAdd={addProduct} onCancel={() => setAddingProduct(false)} />}
+                        {addingProduct && (
+                          <div style={{ background:"#fff", border:"1.5px dashed #CBD5E1", borderRadius:14, overflow:"hidden" }}>
+                            <AddRow placeholder="Product name..." onAdd={addProduct} onCancel={() => setAddingProduct(false)} />
+                          </div>
+                        )}
                       </div>
-                    </Level>
+                    </div>
                   )}
 
                   {/* L2: submissions inside a product */}
                   {curProduct && (
                     <div>
-                      <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
+                      <div style={{ display:"flex", gap:10, marginBottom:16, alignItems:"center" }}>
                         <FilterBar />
-                        <button onClick={() => setShowNew(true)} style={addBtn}><svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Submission</button>
+                        <button onClick={() => setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 16px", background:"#0F1117", color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                          New Submission
+                        </button>
                       </div>
                       <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
-                      <div style={{ fontSize:11.5, color:"#D1D5DB", marginTop:9, paddingLeft:2 }}>{scopedMaterials.filter(m => m.materialName!=="__empty__").length} submission{scopedMaterials.filter(m=>m.materialName!=="__empty__").length!==1?"s":""}</div>
+                      {scopedMaterials.filter(m => m.materialName!=="__empty__").length === 0 && (
+                        <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff", borderRadius:14, border:"1px solid #E8EAED", marginTop:2 }}>
+                          <div style={{ fontWeight:600, fontSize:14, color:"#9CA3AF" }}>No submissions yet — add the first one</div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
@@ -1343,37 +1468,90 @@ export default function App() {
           </>
         )}
 
-        {/* ---- BRAND VIEW: products -> submissions (read-only, approve/reject) ---- */}
+        {/* ---- BRAND VIEW ---- */}
         {view === "brand" && (
           <>
-            {/* Search bar */}
-            <SearchBar search={search} setSearch={setSearch} placeholder="Search materials, products..." />
+            {!bNav && searchResults === null && (
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.03em", color:"#0F1117", lineHeight:1.1, marginBottom:5 }}>Material Approvals</div>
+                {(() => {
+                  const allReal = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                  const pending = allReal.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
+                  const prods   = products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length;
+                  return <div style={{ fontSize:13, color:"#8B909A", fontWeight:500 }}>{pending} Pending · {prods} Product{prods!==1?"s":""}</div>;
+                })()}
+              </div>
+            )}
+
+            <SearchBar search={search} setSearch={setSearch} placeholder="Search products, materials, suppliers..." />
 
             {searchResults !== null
               ? (<div>
-                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
+                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
                     {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
                   </div>
                   <MatTable rows={searchResults} showContext />
                  </div>)
               : <>
-                  {/* L1: product list */}
                   {!bNav && (
-                    <Level title="Products" count={products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length + " product" + (products.length!==1?"s":"")}>
-                      <div style={{ background:"#fff", border:"1px solid #EFEFEF", borderRadius:10, overflow:"hidden" }}>
-                        {products.length===0 && <div style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No products yet</div>}
-                        {products.map((p,i) => {
-                          const count = p.materialIds.filter(id => materials.find(m => m.id===id && m.materialName!=="__empty__")).length;
-                          const pending = p.materialIds.filter(id => { const m = materials.find(x => x.id===id); return m && m.versions.length > 0 && m.versions[m.versions.length-1].status === "Pending"; }).length;
-                          return <FolderRow key={p.id} icon={icoProduct} title={p.name}
-                            sub={count+" submission"+(count!==1?"s":"")+(pending>0?" . "+pending+" pending":"")}
-                            onClick={() => bGoProd(p.id)} last={i===products.length-1} />;
-                        })}
-                      </div>
-                    </Level>
+                    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                      {products.length===0 && (
+                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
+                          <div style={{ fontSize:32, marginBottom:10 }}>🎉</div>
+                          <div style={{ fontWeight:700, fontSize:15, color:"#111827" }}>No pending approvals</div>
+                          <div style={{ color:"#9CA3AF", fontSize:13, marginTop:4 }}>Factory teams are clear.</div>
+                        </div>
+                      )}
+                      {products.map(p => {
+                        const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
+                        const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                        const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
+                        const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
+                        const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
+                        const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                        const latestSub = real.length > 0 ? real[real.length-1].versions.slice(-1)[0].submissionDate : null;
+                        const daysAgo = latestSub ? Math.floor((Date.now()-new Date(latestSub))/(1000*60*60*24)) : null;
+                        const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+                        const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
+                        const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
+                        return (
+                          <div key={p.id} className="prow"
+                            onClick={() => bGoProd(p.id)}
+                            style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:16, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
+                            <div style={{ width:56, height:56, borderRadius:10, background:"#F3F4F6", flexShrink:0, overflow:"hidden", border:"1px solid #E8EAED", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                              {thumb
+                                ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                                : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                              }
+                            </div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                                <span style={{ fontSize:15, fontWeight:700, color:"#0F1117", letterSpacing:"-0.02em" }}>{p.name}</span>
+                                {dominantStatus && (
+                                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text, fontSize:11, fontWeight:600 }}>
+                                    <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />{dominantStatus}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                                {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
+                                {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} pending</span></>}
+                                {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>Updated {timeStr}</span></>}
+                              </div>
+                            </div>
+                            <div style={{ flexShrink:0 }}>
+                              <button onClick={e => { e.stopPropagation(); bGoProd(p.id); }}
+                                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", background:"#0F1117", color:"#fff", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                                Review
+                                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
 
-                  {/* L2: submissions inside a product */}
                   {curBProduct && (
                     <div>
                       <div style={{ display:"flex", gap:7, marginBottom:14 }}><FilterBar /></div>
@@ -1403,7 +1581,7 @@ export default function App() {
 
       {/* ===== BOTTOM VIEW TOGGLE ===== */}
       <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:100 }}>
-        <div style={{ display:"flex", background:"#111827", borderRadius:40, padding:4, gap:2, boxShadow:"0 4px 24px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.12)" }}>
+        <div style={{ display:"flex", background:"#0F1117", borderRadius:40, padding:5, gap:2, boxShadow:"0 8px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.14)" }}>
           {[
             { v:"factory", icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="2 20 2 10 8 6 8 10 14 6 14 10 20 6 22 6 22 20"/></svg>, label:"Factory" },
             { v:"brand",   icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>, label:"Brand" },
@@ -1433,10 +1611,13 @@ export default function App() {
 function SearchBar({ search, setSearch, placeholder }) {
   return (
     <div style={{ position:"relative", marginBottom:20 }}>
-      <svg style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <svg style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder={placeholder}
-        style={{ width:"100%", padding:"10px 12px 10px 34px", border:"1px solid #E5E7EB", borderRadius:9, fontSize:13, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none" }} />
-      {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"#9CA3AF", padding:2 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>}
+        style={{ width:"100%", padding:"11px 14px 11px 38px", border:"1.5px solid #E8EAED", borderRadius:11, fontSize:13.5, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none", boxShadow:"0 1px 3px rgba(0,0,0,0.04)", transition:"border-color 0.15s" }}
+        onFocus={e => e.target.style.borderColor="#0F1117"}
+        onBlur={e => e.target.style.borderColor="#E8EAED"}
+      />
+      {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"#9CA3AF", padding:2 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>}
     </div>
   );
 }
