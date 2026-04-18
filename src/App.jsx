@@ -1387,11 +1387,32 @@ export default function App() {
                           const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
                           const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
                           const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
-                          const latestSub = real.length > 0 ? real[real.length-1].versions.slice(-1)[0].submissionDate : null;
-                          const daysAgo = latestSub ? Math.floor((Date.now()-new Date(latestSub))/(1000*60*60*24)) : null;
+
+                          // Use approvalDate when available (approved/rejected), else submissionDate
+                          const latestMat = real.length > 0 ? real[real.length-1] : null;
+                          const latestVer = latestMat ? latestMat.versions[latestMat.versions.length-1] : null;
+                          const displayDate = latestVer
+                            ? (latestVer.approvalDate || latestVer.submissionDate)
+                            : null;
+                          const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
                           const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+
+                          // Factory-specific status label: Rejected → Requires Resubmission
                           const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
+                          const factoryLabel   = dominantStatus === "Rejected" ? "Requires Resubmission" : dominantStatus;
                           const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
+                          // Resubmission pill gets a distinct orange-red colour
+                          const pillStyle = dominantStatus === "Rejected"
+                            ? { bg:"#FFF3E0", text:"#B45309", dot:"#F97316" }
+                            : sc;
+
+                          // Button label: only "Review" when brand needs to act (pending).
+                          // Factory has nothing to action on pending — use "Open" instead.
+                          const btnLabel = rejected > 0 ? "Resubmit" : "Open";
+                          const btnStyle = rejected > 0
+                            ? { background:"#0F1117", color:"#fff" }
+                            : { background:"#F3F4F6", color:"#374151" };
+
                           return (
                             <div key={p.id} className="prow"
                               onClick={() => goProd(p.id)}
@@ -1405,18 +1426,19 @@ export default function App() {
                               </div>
                               {/* Info */}
                               <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
                                   <span style={{ fontSize:15, fontWeight:700, color:"#0F1117", letterSpacing:"-0.02em" }}>{p.name}</span>
-                                  {dominantStatus && (
-                                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text, fontSize:11, fontWeight:600 }}>
-                                      <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />{dominantStatus}
+                                  {factoryLabel && (
+                                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:pillStyle.bg, color:pillStyle.text, fontSize:11, fontWeight:600 }}>
+                                      <span style={{ width:5, height:5, borderRadius:"50%", background:pillStyle.dot }} />{factoryLabel}
                                     </span>
                                   )}
                                 </div>
                                 <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                                   {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
-                                  {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} pending</span></>}
-                                  {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>Updated {timeStr}</span></>}
+                                  {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} awaiting brand</span></>}
+                                  {rejected > 0 && pending === 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#F97316", fontWeight:600 }}>{rejected} need{rejected===1?"s":""} resubmission</span></>}
+                                  {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{latestVer?.approvalDate ? "Decided" : "Submitted"} {timeStr}</span></>}
                                 </div>
                               </div>
                               {/* Actions */}
@@ -1428,8 +1450,8 @@ export default function App() {
                                   <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                                 </button>
                                 <button onClick={e => { e.stopPropagation(); goProd(p.id); }}
-                                  style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", background:"#0F1117", color:"#fff", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                                  Review
+                                  style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", ...btnStyle }}>
+                                  {btnLabel}
                                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                                 </button>
                               </div>
