@@ -1269,7 +1269,7 @@ export default function App() {
 
       {/* ===== NAV BAR ===== */}
       <div style={{ background:"#fff", borderBottom:"1px solid #EFEFEF" }}>
-        <div style={{ maxWidth:900, margin:"0", height:52, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 clamp(16px, 3vw, 32px)" }}>
+        <div style={{ maxWidth:900, height:52, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 24px" }}>
 
           {/* Logo + breadcrumb */}
           <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
@@ -1296,7 +1296,7 @@ export default function App() {
       </div>
 
       {/* ===== PAGE CONTENT ===== */}
-      <div style={{ maxWidth:900, margin:"0", padding:"24px clamp(16px, 3vw, 32px)" }}>
+      <div style={{ maxWidth:900, padding:"24px 24px" }}>
 
         {/* ---- FACTORY VIEW: products -> submissions ---- */}
         {view === "factory" && (
