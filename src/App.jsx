@@ -1531,11 +1531,23 @@ export default function App() {
                         const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
                         const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
                         const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
-                        const latestSub = real.length > 0 ? real[real.length-1].versions.slice(-1)[0].submissionDate : null;
-                        const daysAgo = latestSub ? Math.floor((Date.now()-new Date(latestSub))/(1000*60*60*24)) : null;
+
+                        // Use approvalDate when available, else submissionDate
+                        const latestMat = real.length > 0 ? real[real.length-1] : null;
+                        const latestVer = latestMat ? latestMat.versions[latestMat.versions.length-1] : null;
+                        const displayDate = latestVer ? (latestVer.approvalDate || latestVer.submissionDate) : null;
+                        const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
                         const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+
                         const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
                         const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
+
+                        // Brand button: "Review" only when there's something pending to approve/reject
+                        const btnLabel = pending > 0 ? "Review" : "Open";
+                        const btnStyle = pending > 0
+                          ? { background:"#0F1117", color:"#fff" }
+                          : { background:"#F3F4F6", color:"#374151" };
+
                         return (
                           <div key={p.id} className="prow"
                             onClick={() => bGoProd(p.id)}
@@ -1557,14 +1569,14 @@ export default function App() {
                               </div>
                               <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                                 {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
-                                {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} pending</span></>}
-                                {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>Updated {timeStr}</span></>}
+                                {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} to review</span></>}
+                                {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{latestVer?.approvalDate ? "Decided" : "Submitted"} {timeStr}</span></>}
                               </div>
                             </div>
                             <div style={{ flexShrink:0 }}>
                               <button onClick={e => { e.stopPropagation(); bGoProd(p.id); }}
-                                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", background:"#0F1117", color:"#fff", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                                Review
+                                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", ...btnStyle }}>
+                                {btnLabel}
                                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                               </button>
                             </div>
