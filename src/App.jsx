@@ -608,6 +608,11 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
   brandComment, setBrandComment, setMaterials, onSubmitNewVersion,
   showNewVersionFor, setShowNewVersionFor }) {
 
+  // Local style constant — MaterialDetail lives outside App() so can't use App's inp
+  const inp = { width:"100%", padding:"8px 10px", border:"1.5px solid #E5E7EB",
+    borderRadius:7, fontSize:13, fontFamily:"inherit", color:"#111827",
+    background:"#fff", outline:"none", boxSizing:"border-box" };
+
   const [activeVersionIdx, setActiveVersionIdx] = useState(material.versions.length - 1);
   const [editShipment,     setEditShipment]     = useState(false);
   const [newVer,           setNewVer]           = useState({ factoryNotes:"", courier:"DHL", trackingNumber:"", image:null });
@@ -1650,38 +1655,47 @@ export default function App() {
           <div style={{ fontSize:10, fontWeight:700, color:"#C4C9D4", textTransform:"uppercase",
             letterSpacing:"0.08em", padding:"0 8px", marginBottom:6 }}>Approvals</div>
 
-          {[
-            { key:"materials", label:"Materials",
-              count: materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0
-                && m.versions[m.versions.length-1].status === "Pending").length,
-              icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
-            { key:"samples", label:"Garment Samples",
-              count: gSamples.filter(s => s.status === "Awaiting Review").length,
-              icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
-          ].map(item => (
-            <button key={item.key} className="navitem"
-              onClick={() => { setSection(item.key); setGSelected(null); setNav(null); setBNav(null); }}
-              style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                padding:"8px 10px", borderRadius:7, border:"none", cursor:"pointer",
-                fontFamily:"inherit", textAlign:"left", width:"100%",
-                background: section===item.key ? "#F3F4F6" : "transparent",
-                transition:"background 0.1s" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ color: section===item.key ? "#0F1117" : "#9CA3AF",
-                  display:"flex", alignItems:"center" }}>{item.icon}</span>
-                <span style={{ fontSize:13, fontWeight: section===item.key ? 600 : 400,
-                  color: section===item.key ? "#0F1117" : "#6B7280" }}>{item.label}</span>
-              </div>
-              {item.count > 0 && (
-                <span style={{ fontSize:10, fontWeight:700, minWidth:18, height:18,
-                  borderRadius:9, background: section===item.key ? "#0F1117" : "#E5E7EB",
-                  color: section===item.key ? "#fff" : "#6B7280",
-                  display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px" }}>
-                  {item.count}
-                </span>
-              )}
-            </button>
-          ))}
+          {(() => {
+            // Count pending actions based on current view
+            const realMats = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+            const matCount = view === "brand"
+              ? realMats.filter(m => m.versions[m.versions.length-1].status === "Pending").length
+              : realMats.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
+            const gsCount = view === "brand"
+              ? gSamples.filter(s => s.status === "Awaiting Review").length
+              : gSamples.filter(s => s.status === "New Sample Requested").length;
+
+            return [
+              { key:"materials", label:"Materials",      count: matCount,
+                icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
+              { key:"samples",   label:"Garment Samples",count: gsCount,
+                icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
+            ].map(item => (
+              <button key={item.key} className="navitem"
+                onClick={() => { setSection(item.key); setGSelected(null); setNav(null); setBNav(null); }}
+                style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                  padding:"8px 10px", borderRadius:7, border:"none", cursor:"pointer",
+                  fontFamily:"inherit", textAlign:"left", width:"100%",
+                  background: section===item.key ? "#F3F4F6" : "transparent",
+                  transition:"background 0.1s" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ color: section===item.key ? "#0F1117" : "#9CA3AF",
+                    display:"flex", alignItems:"center" }}>{item.icon}</span>
+                  <span style={{ fontSize:13, fontWeight: section===item.key ? 600 : 400,
+                    color: section===item.key ? "#0F1117" : "#6B7280" }}>{item.label}</span>
+                </div>
+                {item.count > 0 && (
+                  <span style={{ fontSize:10, fontWeight:700, minWidth:18, height:18,
+                    borderRadius:9,
+                    background: section===item.key ? "#111827" : "#EF4444",
+                    color: "#fff",
+                    display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px" }}>
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            ));
+          })()}
         </div>
 
         {/* ── Main scrollable content ── */}
