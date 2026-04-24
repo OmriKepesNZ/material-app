@@ -1922,6 +1922,8 @@ export default function App() {
             }
           </>
         )}
+        </>)}{/* end materials section */}
+
       </div>
 
       {selectedMaterial && (
@@ -1934,7 +1936,6 @@ export default function App() {
           showNewVersionFor={showNewVersionFor} setShowNewVersionFor={setShowNewVersionFor}
         />
       )}
-        </>)}{/* end materials section */}
 
         {/* ===== GARMENT SAMPLES SECTION ===== */}
         {section === "samples" && (
