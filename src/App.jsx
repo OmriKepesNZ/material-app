@@ -31,6 +31,19 @@ const GS_STATUS_COLORS = {
   "Rejected":               { bg:"#FEF2F2", text:"#991B1B",  dot:"#EF4444" },
 };
 
+// ─── Shared style constants ──────────────────────────────────────────────────
+// inp is used across DetailModal, FilterBar, and GS modals
+const inp = {
+  width:"100%", padding:"8px 10px", border:"1.5px solid #E5E7EB",
+  borderRadius:7, fontSize:13, fontFamily:"inherit", color:"#111827",
+  background:"#fff", outline:"none", boxSizing:"border-box",
+};
+const lbl = {
+  fontSize:10, fontWeight:600, color:"#9CA3AF",
+  textTransform:"uppercase", letterSpacing:"0.07em",
+  display:"block", marginBottom:4,
+};
+
 // ─── Shared tiny components ──────────────────────────────────────────────────
 function Badge({ status, type = "approval" }) {
   const c = (type === "approval" ? STATUS_COLORS : SHIP_COLORS)[status]
@@ -318,9 +331,7 @@ function DetailModal({ material, view, onClose, onApprove, onReject, brandCommen
     r.readAsDataURL(file);
   }
 
-  const inp = { width: "100%", padding: "7px 10px", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 13, fontFamily: "inherit", color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box" };
-  const lbl = { fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 4 };
-  const card = { padding: "12px 14px", background: "#FAFAFA", borderRadius: 8, border: "1px solid #F3F4F6" };
+  const card = { padding:"12px 14px", background:"#FAFAFA", borderRadius:8, border:"1px solid #F3F4F6" };
 
   return (
     <div onClick={e => e.target === e.currentTarget && close()}
@@ -595,9 +606,7 @@ function GsNewSampleModal({ onClose, onSubmit, existingProductNames }) {
     close();
   }
 
-  const inp = { width:"100%", padding:"9px 11px", border:"1.5px solid #E5E7EB",
-    borderRadius:8, fontSize:13, fontFamily:"inherit", color:"#111827",
-    background:"#fff", outline:"none", boxSizing:"border-box" };
+
   const steps = ["Details", "Photos & files"];
   const isMatch = existingProductNames.some(n => n.toLowerCase() === productName.trim().toLowerCase());
 
@@ -820,9 +829,7 @@ function GsNewVersionModal({ sample, onClose, onSubmit }) {
     close();
   }
 
-  const inp = { width:"100%", padding:"9px 11px", border:"1.5px solid #E5E7EB",
-    borderRadius:8, fontSize:13, fontFamily:"inherit", color:"#111827",
-    background:"#fff", outline:"none", boxSizing:"border-box" };
+
   const nextVer = sample.versions.length + 1;
 
   return (
@@ -966,11 +973,7 @@ function GsReviewModal({ sample, versionIdx, onClose, onSubmit }) {
     close();
   }
 
-  const inp = { width:"100%", padding:"8px 10px", border:"1.5px solid #E5E7EB",
-    borderRadius:7, fontSize:13, fontFamily:"inherit", color:"#111827",
-    background:"#fff", outline:"none", boxSizing:"border-box" };
-  const lbl = { fontSize:10, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase",
-    letterSpacing:"0.07em", display:"block", marginBottom:5 };
+
   const divLine = { height:1, background:"#F3F4F6", margin:"4px 0 16px" };
 
   const STATUS_OPTS = [
