@@ -1,14 +1,4 @@
-im
-// ─── Shared icon constants ───────────────────────────────────────────────────
-const ICO = {
-  close:   <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-  back:    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>,
-  chevron: <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>,
-  plus:    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
-  search:  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
-};
-
-port React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { loadAllData, createRecord, updateRecord, uploadImage, deleteProduct,
   loadGarmentSamples, createGarmentSample, createSampleVersion, reviewSampleVersion, uploadFile } from "./airtable";
 
@@ -628,7 +618,7 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
       No submissions yet.
       <button onClick={onClose} style={{ display:"block", margin:"16px auto 0", background:"none",
         border:"none", color:"#6B7280", cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
-        {ICO.back} Back
+        {ICO.back()} Back
       </button>
     </div>
   );
@@ -655,7 +645,7 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
           <button onClick={onClose}
             style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
               display:"flex", alignItems:"center", gap:4, fontSize:13, fontFamily:"inherit", padding:0 }}>
-            {ICO.back} Back
+            {ICO.back()} Back
           </button>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
           <span style={{ fontSize:13, color:"#6B7280" }}>{material.styleName}</span>
@@ -863,6 +853,17 @@ function AddRow({ placeholder, onAdd, onCancel }) {
 }
 
 // --- Main App -----------------------------------------------------------------
+// ─── Icon helpers (functions so JSX compiles correctly at module level) ───────
+const ICO = {
+  close:   () => <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  back:    () => <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>,
+  chevron: () => <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>,
+  plus:    () => <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  search:  () => <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+};
+
+
+
 export default function App() {
 
   const [view,    setView]    = useState("factory"); // "factory" | "brand"
@@ -1698,7 +1699,7 @@ export default function App() {
                             style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
                               background:"#111827", color:"#fff", border:"none", borderRadius:7,
                               fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                            {ICO.plus} Add product
+                            {ICO.plus()} Add product
                           </button>
                         </div>
                       )}
@@ -1822,7 +1823,7 @@ export default function App() {
                             style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
                               background:"#111827", color:"#fff", border:"none", borderRadius:7,
                               fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                            {ICO.plus} New Submission
+                            {ICO.plus()} New Submission
                           </button>
                         </div>
                         <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
@@ -2182,6 +2183,8 @@ export default function App() {
     </div>
   );
 }
+
+
 
 function SearchBar({ search, setSearch, placeholder }) {
   return (
