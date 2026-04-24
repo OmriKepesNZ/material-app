@@ -418,7 +418,7 @@ function DetailModal({ material, view, onClose, onApprove, onReject, brandCommen
         backdropFilter: visible ? "blur(5px)" : "blur(0)",
         transition: "background 0.2s, backdrop-filter 0.2s" }}>
       <div style={{
-        background: "#fff", borderRadius: 16, width: "100%", maxWidth: 700, maxHeight: "90vh", overflowY: "auto",
+        background: "#fff", borderRadius: 16, width: "100%", maxWidth: 900, maxHeight: "92vh", overflowY: "auto",
         boxShadow: visible ? "0 0 0 1px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.1), 0 32px 72px rgba(0,0,0,0.2)" : "none",
         transform: visible ? "translateY(0) scale(1)" : "translateY(24px) scale(0.96)",
         opacity: visible ? 1 : 0,
@@ -2175,7 +2175,7 @@ export default function App() {
       {/* ===== NAV BAR ===== */}
       <div style={{ background:"#fff", borderBottom:"1px solid #E8EAED", flexShrink:0 }}>
         <div style={{ height:56, display:"flex", alignItems:"center",
-          justifyContent:"space-between", padding:"0 24px" }}>
+          justifyContent:"space-between", padding:"0 32px" }}>
 
           {/* Logo + breadcrumb */}
           <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
@@ -2274,10 +2274,10 @@ export default function App() {
         </div>
 
         {/* ── Main scrollable content ── */}
-        <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 100px", minWidth:0 }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"24px 32px 80px", minWidth:0 }}>
 
         {/* ===== PAGE CONTENT ===== */}
-        <div style={{ maxWidth:900 }}>
+        <div>
 
 
 
