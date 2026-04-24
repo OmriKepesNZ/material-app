@@ -2118,6 +2118,9 @@ export default function App() {
           </>
         )}
 
+        </div>{/* end maxWidth */}
+        </div>{/* end main content */}
+
       {showNew && (
         <NewSubmissionModal onClose={() => setShowNew(false)} onSubmit={addMaterial}
           existingStyles={allStyles} existingMaterials={scopedMaterials} />
@@ -2130,10 +2133,6 @@ export default function App() {
           onSubmit={async data => { await handleGsSubmit(data); setShowNewGs(false); }}
         />
       )}
-
-        </div>{/* end maxWidth */}
-        </div>{/* end main content */}
-      </div>{/* end body */}
 
       {/* ===== BOTTOM VIEW TOGGLE (hidden — toggle moved to navbar) ===== */}
       <div style={{ display:"none" }}>
