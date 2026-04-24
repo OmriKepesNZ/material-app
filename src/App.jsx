@@ -298,6 +298,19 @@ function DetailModal({ material, view, onClose, onApprove, onReject, brandCommen
 
   function close() { setVisible(false); setTimeout(onClose, 200); }
 
+  // Guard: if no versions exist, show a simple empty state
+  if (!v || !latest) return (
+    <div onClick={close}
+      style={{ position:"fixed", inset:0, zIndex:200, display:"flex", alignItems:"center",
+        justifyContent:"center", background:"rgba(10,10,15,0.5)", backdropFilter:"blur(5px)" }}>
+      <div style={{ background:"#fff", borderRadius:16, padding:"32px 40px", textAlign:"center" }}>
+        <div style={{ fontSize:15, fontWeight:600, marginBottom:8 }}>No submissions yet</div>
+        <div style={{ fontSize:13, color:"#9CA3AF", marginBottom:20 }}>This material has no versions recorded.</div>
+        <button onClick={close} className="btn-primary">Close</button>
+      </div>
+    </div>
+  );
+
   function handleVersionImg(file) {
     if (!file) return;
     const r = new FileReader();
@@ -1952,7 +1965,12 @@ export default function App() {
 
   // ---- materials table (shared) ----
   function MatTable({ rows, showContext = false }) {
-    const filtered = rows.filter(m => (!filters.type || m.materialType === filters.type) && (!filters.status || m.latest.status === filters.status));
+    // Skip materials with no versions (sentinels) — they have no latest
+    const filtered = rows.filter(m =>
+      m.latest &&
+      (!filters.type   || m.materialType     === filters.type) &&
+      (!filters.status || m.latest.status    === filters.status)
+    );
     return (
       <div style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
@@ -1967,7 +1985,7 @@ export default function App() {
               ? <tr><td colSpan={showContext ? 6 : 5} style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No materials found</td></tr>
               : filtered.map((m, idx) => (
                 <tr key={m.id} className="mrow"
-                  onClick={() => { setSelected(m.id); setBrandComment(m.latest.brandComment||""); setShowNewVersionFor(null); }}
+                  onClick={() => { if (!m.latest) return; setSelected(m.id); setBrandComment(m.latest.brandComment||""); setShowNewVersionFor(null); }}
                   style={{ borderBottom: idx < filtered.length-1 ? "1px solid #F9FAFB" : "none", background:"#fff", transition:"background 0.08s" }}>
                   {showContext && (
                     <td style={{ padding:"10px 14px" }}>
