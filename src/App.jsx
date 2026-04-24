@@ -1427,7 +1427,7 @@ export default function App() {
 
   // ---- materials table (shared) ----
   function MatTable({ rows, showContext = false }) {
-    const filtered = rows.filter(m => (!filters.type || m.materialType === filters.type) && (!filters.status || m.latest.status === filters.status));
+    const filtered = rows.filter(m => m.latest && (!filters.type || m.materialType === filters.type) && (!filters.status || m.latest.status === filters.status));
     return (
       <div style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
@@ -1448,8 +1448,15 @@ export default function App() {
                     setShowNewVersionFor(null);
                     // If in search mode, also nav into the product so detail view renders
                     if (searchResults !== null) {
-                      if (view === "factory") { goProd(m.styleName); }
-                      else { bGoProd(m.styleName); }
+                      // Find the product by airtableProductId or by matching name
+                      const prod = products.find(p =>
+                        p.airtableProductId === m.airtableProductId ||
+                        p.name === m.styleName
+                      );
+                      if (prod) {
+                        if (view === "factory") goProd(prod.id);
+                        else bGoProd(prod.id);
+                      }
                       setSearch("");
                     }
                   }}
