@@ -733,10 +733,14 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
                 const isAct=idx===activeVersionIdx;
                 return (
                   <div key={ver.version} onClick={()=>{setActiveVersionIdx(idx);setEditShipment(false);}}
-                    className={`ver-row${isAct?" active":""}`} style={{ marginBottom:2 }}>
+                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                      padding:"9px 12px", borderRadius:8, cursor:"pointer", marginBottom:2,
+                      background: isAct ? "#111827" : "#F9FAFB",
+                      border: isAct ? "1px solid #111827" : "1px solid #F3F4F6",
+                      transition:"all 0.1s" }}>
                     <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                      <span style={{ fontSize:12,fontWeight:isAct?700:500,color:isAct?"#111827":"#6B7280",fontFamily:"monospace" }}>V{ver.version}</span>
-                      <span style={{ fontSize:12,color:"#9CA3AF" }}>{ver.submissionDate}</span>
+                      <span style={{ fontSize:12,fontWeight:isAct?700:500,color:isAct?"#fff":"#374151",fontFamily:"monospace" }}>V{ver.version}</span>
+                      <span style={{ fontSize:12,color:isAct?"rgba(255,255,255,0.6)":"#9CA3AF" }}>{ver.submissionDate}</span>
                     </div>
                     <Badge status={ver.status} />
                   </div>
@@ -1438,7 +1442,17 @@ export default function App() {
               ? <tr><td colSpan={showContext ? 6 : 5} style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No materials found</td></tr>
               : filtered.map((m, idx) => (
                 <tr key={m.id} className="mrow"
-                  onClick={() => { setSelected(m.id); setBrandComment(m.latest.brandComment||""); setShowNewVersionFor(null); }}
+                  onClick={() => {
+                    setSelected(m.id);
+                    setBrandComment(m.latest?.brandComment||"");
+                    setShowNewVersionFor(null);
+                    // If in search mode, also nav into the product so detail view renders
+                    if (searchResults !== null) {
+                      if (view === "factory") { goProd(m.styleName); }
+                      else { bGoProd(m.styleName); }
+                      setSearch("");
+                    }
+                  }}
                   style={{ borderBottom: idx < filtered.length-1 ? "1px solid #F9FAFB" : "none", background:"#fff", transition:"background 0.08s" }}>
                   {showContext && (
                     <td style={{ padding:"10px 14px" }}>
@@ -1575,13 +1589,15 @@ export default function App() {
             {section === "materials" && view === "factory" && (
               <>
                 <BCBtn label="Approvals" dim={!!nav} onClick={goHome} />
-                {curProduct && <><BCSep/><BCBtn label={curProduct.name} dim={false} onClick={null} /></>}
+                {curProduct && <><BCSep/><BCBtn label={curProduct.name} dim={!!selectedMaterial} onClick={selectedMaterial ? () => setSelected(null) : null} /></>}
+                {curProduct && selectedMaterial && <><BCSep/><BCBtn label={selectedMaterial.materialName} dim={false} onClick={null} /></>}
               </>
             )}
             {section === "materials" && view === "brand" && (
               <>
                 <BCBtn label="Approvals" dim={!!bNav} onClick={bGoHome} />
-                {curBProduct && <><BCSep/><BCBtn label={curBProduct.name} dim={false} onClick={null} /></>}
+                {curBProduct && <><BCSep/><BCBtn label={curBProduct.name} dim={!!selectedMaterial} onClick={selectedMaterial ? () => setSelected(null) : null} /></>}
+                {curBProduct && selectedMaterial && <><BCSep/><BCBtn label={selectedMaterial.materialName} dim={false} onClick={null} /></>}
               </>
             )}
             {section === "samples" && (
@@ -1932,7 +1948,7 @@ export default function App() {
                         key={selectedMaterial.id}
                         material={selectedMaterial}
                         view={view}
-                        onClose={() => setSelected(null)}
+                        onClose={() => { setSelected(null); }}
                         onApprove={handleApprove}
                         onReject={handleReject}
                         brandComment={brandComment}
@@ -1944,7 +1960,9 @@ export default function App() {
                       />
                     ) : (
                       <div>
-                        <div style={{ display:"flex", gap:7, marginBottom:14 }}><FilterBar /></div>
+                        <div style={{ display:"flex", gap:7, marginBottom:14 }}>
+                          <FilterBar />
+                        </div>
                         <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
                       </div>
                     )
@@ -3098,10 +3116,10 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
                       onMouseLeave={e=>{if(!isAct)e.currentTarget.style.background="transparent";}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:12,fontWeight:isAct?700:500,
-                          color:isAct?"#111827":"#6B7280",fontFamily:"monospace"}}>
+                          color:isAct?"#fff":"#374151",fontFamily:"monospace"}}>
                           Proto {v.versionNum}
                         </span>
-                        <span style={{fontSize:12,color:"#9CA3AF"}}>{v.dateReceived}</span>
+                        <span style={{fontSize:12,color:isAct?"rgba(255,255,255,0.6)":"#9CA3AF"}}>{v.dateReceived}</span>
                       </div>
                       <GsBadge status={v.status}/>
                     </div>
