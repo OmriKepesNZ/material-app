@@ -120,19 +120,21 @@ function AddRow({ placeholder, onAdd, onCancel }) {
 }
 
 // ─── Materials: New Submission Modal ─────────────────────────────────────────
-// Simplified: 2 steps — pick type, upload photo + add details manually.
-// AI extraction removed; all fields filled by the user.
+// UX goal: fast and frictionless for factory workers.
+// Single flowing screen — photo first, type clear, everything else secondary.
 function NewSubmissionModal({ onClose, onSubmit, existingStyles, existingMaterials }) {
-  const [step,         setStep]        = useState("form");
-  const [materialType, setMaterialType]= useState("");
-  const [materialName, setMaterialName]= useState("");
-  const [notes,        setNotes]       = useState("");
-  const [specs,        setSpecs]       = useState("");
-  const [image,        setImage]       = useState(null);
-  const [courier,      setCourier]     = useState("DHL");
-  const [tracking,     setTracking]    = useState("");
-  const [visible,      setVisible]     = useState(false);
+  const [materialType, setMaterialType] = useState("");
+  const [materialName, setMaterialName] = useState("");
+  const [notes,        setNotes]        = useState("");
+  const [specs,        setSpecs]        = useState("");
+  const [image,        setImage]        = useState(null);
+  const [courier,      setCourier]      = useState("DHL");
+  const [tracking,     setTracking]     = useState("");
+  const [showTracking, setShowTracking] = useState(false);
+  const [submitting,   setSubmitting]   = useState(false);
+  const [visible,      setVisible]      = useState(false);
   const fileRef = useRef();
+  const dropRef = useRef();
 
   useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
   const close = () => { setVisible(false); setTimeout(onClose, 200); };
@@ -144,16 +146,17 @@ function NewSubmissionModal({ onClose, onSubmit, existingStyles, existingMateria
     r.readAsDataURL(file);
   }
 
-  function handleSubmit() {
-    // Find existing version number for this material
+  async function handleSubmit() {
+    if (!materialType || !materialName.trim()) return;
+    setSubmitting(true);
     const match = existingMaterials.find(m =>
       m.materialType === materialType &&
-      m.materialName.toLowerCase() === materialName.toLowerCase()
+      m.materialName.toLowerCase() === materialName.trim().toLowerCase()
     );
     const version = match ? match.versions.length + 1 : 1;
-    onSubmit({
+    await onSubmit({
       materialType,
-      materialName: materialName || "Unnamed",
+      materialName: materialName.trim(),
       factoryNotes: notes,
       extractedSpecs: specs,
       image,
@@ -167,128 +170,203 @@ function NewSubmissionModal({ onClose, onSubmit, existingStyles, existingMateria
     close();
   }
 
-  const panelStyle = {
-    background:"#fff", borderRadius:20, width:"100%", maxWidth:440, overflow:"hidden",
-    boxShadow: visible ? "0 0 0 1px rgba(0,0,0,0.06),0 24px 64px rgba(0,0,0,0.18)" : "none",
-    transform: visible ? "translateY(0) scale(1)" : "translateY(20px) scale(0.97)",
-    opacity: visible ? 1 : 0,
-    transition: "transform 0.24s cubic-bezier(0.22,1,0.36,1),opacity 0.18s,box-shadow 0.24s",
-  };
+  const canSubmit = !!materialType && !!materialName.trim();
 
   return (
     <div onClick={e => e.target===e.currentTarget && close()}
       style={{ position:"fixed", inset:0, zIndex:200, display:"flex", alignItems:"center",
-        justifyContent:"center", padding:20,
+        justifyContent:"center", padding:16,
         background: visible ? "rgba(10,10,15,0.55)" : "rgba(10,10,15,0)",
         backdropFilter: visible ? "blur(6px)" : "blur(0)",
-        transition:"background 0.22s,backdrop-filter 0.22s" }}>
+        transition:"background 0.22s, backdrop-filter 0.22s" }}>
 
       <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
         onChange={e => handleFile(e.target.files[0])} />
 
-      <div style={panelStyle}>
-        {/* Header */}
-        <div style={{ padding:"24px 24px 0" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-            <div style={{ fontSize:17, fontWeight:650, letterSpacing:"-0.02em" }}>New Submission</div>
-            <button onClick={close} className="btn-outline"
-              style={{ width:30, height:30, padding:0, justifyContent:"center" }}>{ICO.close}</button>
+      <div style={{
+        background:"#fff", borderRadius:20, width:"100%", maxWidth:460,
+        maxHeight:"92vh", overflowY:"auto",
+        boxShadow: visible ? "0 0 0 1px rgba(0,0,0,0.06),0 24px 64px rgba(0,0,0,0.18)" : "none",
+        transform: visible ? "translateY(0) scale(1)" : "translateY(20px) scale(0.97)",
+        opacity: visible ? 1 : 0,
+        transition:"transform 0.24s cubic-bezier(0.22,1,0.36,1),opacity 0.18s,box-shadow 0.24s",
+      }}>
+
+        {/* ── Photo area — full width, tap anywhere to upload ── */}
+        <div
+          ref={dropRef}
+          onClick={() => fileRef.current.click()}
+          onDragOver={e => { e.preventDefault(); dropRef.current.style.background="#F0F0FF"; }}
+          onDragLeave={() => { dropRef.current.style.background = image ? "transparent" : "#F9FAFB"; }}
+          onDrop={e => { e.preventDefault(); dropRef.current.style.background="#F9FAFB"; handleFile(e.dataTransfer.files[0]); }}
+          style={{ position:"relative", cursor:"pointer",
+            background: image ? "transparent" : "#F9FAFB",
+            borderBottom:"1px solid #F3F4F6",
+            transition:"background 0.15s" }}>
+
+          {image ? (
+            <>
+              <img src={image} alt="" style={{ width:"100%", height:200, objectFit:"cover", display:"block" }} />
+              {/* Overlay with replace hint */}
+              <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0)",
+                display:"flex", alignItems:"flex-end", justifyContent:"flex-end",
+                padding:10, transition:"background 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.background="rgba(0,0,0,0.25)"}
+                onMouseLeave={e => e.currentTarget.style.background="rgba(0,0,0,0)"}>
+                <span style={{ background:"rgba(0,0,0,0.55)", color:"#fff", fontSize:11,
+                  fontWeight:500, padding:"4px 10px", borderRadius:6,
+                  backdropFilter:"blur(4px)", opacity:0, transition:"opacity 0.15s" }}
+                  className="replace-hint">
+                  Tap to replace
+                </span>
+              </div>
+            </>
+          ) : (
+            <div style={{ padding:"36px 24px", textAlign:"center" }}>
+              <div style={{ width:52, height:52, borderRadius:14, background:"#F3F4F6",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                margin:"0 auto 12px" }}>
+                <svg width={24} height={24} viewBox="0 0 24 24" fill="none"
+                  stroke="#9CA3AF" strokeWidth="1.6">
+                  <rect x="3" y="3" width="18" height="18" rx="3"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+              </div>
+              <div style={{ fontSize:15, fontWeight:600, color:"#111827", marginBottom:4 }}>
+                Add a photo
+              </div>
+              <div style={{ fontSize:13, color:"#9CA3AF" }}>
+                Tap here or drag and drop
+              </div>
+            </div>
+          )}
+
+          {/* Header overlaid on photo (or above if no photo) */}
+          <div style={{ position:"absolute", top:12, left:14, right:14,
+            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:13, fontWeight:600,
+              color: image ? "#fff" : "#111827",
+              textShadow: image ? "0 1px 4px rgba(0,0,0,0.4)" : "none" }}>
+              New Submission
+            </div>
+            <button onClick={e => { e.stopPropagation(); close(); }}
+              style={{ width:28, height:28, borderRadius:7,
+                border: image ? "none" : "1px solid #E5E7EB",
+                background: image ? "rgba(0,0,0,0.4)" : "#fff",
+                cursor:"pointer", display:"flex", alignItems:"center",
+                justifyContent:"center", backdropFilter: image ? "blur(4px)" : "none" }}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none"
+                stroke={image ? "#fff" : "#9CA3AF"} strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
           </div>
         </div>
 
-        {/* Step 1: pick type */}
-        {step === "form" && (
-          <div style={{ padding:"0 24px 24px" }}>
-            <p style={{ fontSize:11, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase",
-              letterSpacing:"0.07em", marginBottom:8 }}>Material Type</p>
-            <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+        {/* ── Form body ── */}
+        <div style={{ padding:"20px 20px 24px", display:"flex", flexDirection:"column", gap:16 }}>
+
+          {/* Material type — big clear buttons */}
+          <div>
+            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+              letterSpacing:"0.07em", marginBottom:8 }}>What are you submitting?</p>
+            <div style={{ display:"flex", gap:7 }}>
               {MATERIAL_TYPES.map(t => (
                 <button key={t} onClick={() => setMaterialType(t)}
-                  style={{ flex:1, padding:"10px 4px", borderRadius:8, border:"1.5px solid",
-                    cursor:"pointer", fontFamily:"inherit", fontSize:12.5, fontWeight:500,
+                  style={{ flex:1, padding:"11px 6px", borderRadius:9, border:"1.5px solid",
+                    cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:600,
+                    lineHeight:1.3, transition:"all 0.12s",
                     borderColor: materialType===t ? "#111827" : "#E5E7EB",
                     background:  materialType===t ? "#111827" : "#fff",
-                    color:       materialType===t ? "#fff"    : "#374151" }}>
+                    color:       materialType===t ? "#fff"    : "#6B7280" }}>
                   {t}
                 </button>
               ))}
             </div>
-            <button onClick={() => setStep("details")} disabled={!materialType}
-              className="btn-primary" style={{ width:"100%", padding:13, justifyContent:"center",
-                fontSize:14, borderRadius:10 }}>
-              Continue →
-            </button>
           </div>
-        )}
 
-        {/* Step 2: details + photo */}
-        {step === "details" && (
-          <div style={{ padding:"0 24px 24px", display:"flex", flexDirection:"column", gap:14 }}>
-            <button onClick={() => setStep("form")}
-              style={{ background:"none", border:"none", cursor:"pointer", display:"flex",
-                alignItems:"center", gap:5, color:"#9CA3AF", fontSize:13, fontFamily:"inherit",
-                padding:0, marginBottom:4 }}>
-              {ICO.back} Back
+          {/* Material name */}
+          <div>
+            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+              letterSpacing:"0.07em", marginBottom:6 }}>Name</p>
+            <input value={materialName} onChange={e => setMaterialName(e.target.value)}
+              placeholder="e.g. Olive Lab Dip, YKK #5 Zipper Pull…"
+              style={{ ...inp, fontSize:14, padding:"10px 12px" }} />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+              letterSpacing:"0.07em", marginBottom:6 }}>
+              Notes
+              <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0,
+                color:"#C4C9D4", marginLeft:5 }}>— optional</span>
+            </p>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+              placeholder="What changed, anything to flag…"
+              style={{ ...inp, resize:"none", lineHeight:1.55 }} />
+          </div>
+
+          {/* Specs */}
+          <div>
+            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+              letterSpacing:"0.07em", marginBottom:6 }}>
+              Specs
+              <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0,
+                color:"#C4C9D4", marginLeft:5 }}>— optional</span>
+            </p>
+            <textarea value={specs} onChange={e => setSpecs(e.target.value)} rows={3}
+              placeholder="Colour delta, composition, finish, weight, dimensions…"
+              style={{ ...inp, resize:"none", lineHeight:1.55 }} />
+          </div>
+
+          {/* Courier / tracking — collapsed by default */}
+          {!showTracking ? (
+            <button onClick={() => setShowTracking(true)}
+              style={{ background:"none", border:"none", cursor:"pointer", fontFamily:"inherit",
+                fontSize:13, color:"#9CA3AF", padding:0, textAlign:"left",
+                display:"flex", alignItems:"center", gap:5 }}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2">
+                <rect x="1" y="3" width="15" height="13" rx="1"/>
+                <path d="M16 8h4l3 3v5h-7V8z"/>
+                <circle cx="5.5" cy="18.5" r="2.5"/>
+                <circle cx="18.5" cy="18.5" r="2.5"/>
+              </svg>
+              Add courier & tracking number
             </button>
-
-            <div>
-              <p className="lbl">Material Name</p>
-              <input value={materialName} onChange={e => setMaterialName(e.target.value)}
-                placeholder={`e.g. Olive Lab Dip, YKK Zipper Pull...`}
-                className="inp" />
-            </div>
-
-            <div>
-              <p className="lbl">Factory Notes <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0, color:"#C4C9D4" }}>— optional</span></p>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-                placeholder="What was submitted, changes made..." className="inp" />
-            </div>
-
-            <div>
-              <p className="lbl">Specs <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0, color:"#C4C9D4" }}>— optional</span></p>
-              <textarea value={specs} onChange={e => setSpecs(e.target.value)} rows={3}
-                placeholder="Colour delta, composition, finish, dimensions..." className="inp" />
-            </div>
-
-            <div>
-              <p className="lbl">Photo <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0, color:"#C4C9D4" }}>— optional</span></p>
-              <div onClick={() => fileRef.current.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
-                className="drop-zone">
-                {image
-                  ? <img src={image} alt="" style={{ maxHeight:80, borderRadius:5 }} />
-                  : <><div style={{ fontSize:13, fontWeight:600, color:"#374151" }}>Drop photo here</div>
-                     <div style={{ fontSize:12, color:"#9CA3AF" }}>or click to browse</div></>}
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              <div>
+                <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+                  letterSpacing:"0.07em", marginBottom:6 }}>Courier</p>
+                <select value={courier} onChange={e => setCourier(e.target.value)}
+                  style={{ ...inp, appearance:"none" }}>
+                  {COURIER_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+                  letterSpacing:"0.07em", marginBottom:6 }}>Tracking no.</p>
+                <input value={tracking} onChange={e => setTracking(e.target.value)}
+                  placeholder="Optional" style={inp} />
               </div>
             </div>
+          )}
 
-            <details>
-              <summary style={{ fontSize:12, color:"#9CA3AF", cursor:"pointer", listStyle:"none" }}>
-                + Add courier / tracking
-              </summary>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:10 }}>
-                <div>
-                  <p className="lbl">Courier</p>
-                  <select value={courier} onChange={e => setCourier(e.target.value)} className="inp">
-                    {COURIER_OPTIONS.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="lbl">Tracking No.</p>
-                  <input value={tracking} onChange={e => setTracking(e.target.value)}
-                    placeholder="Optional" className="inp" />
-                </div>
-              </div>
-            </details>
-
-            <button onClick={handleSubmit} disabled={!materialName.trim()}
-              className="btn-primary" style={{ width:"100%", padding:13, justifyContent:"center",
-                fontSize:14, borderRadius:10 }}>
-              Submit
-            </button>
-          </div>
-        )}
+          {/* Submit */}
+          <button onClick={handleSubmit} disabled={!canSubmit || submitting}
+            style={{ width:"100%", padding:14, borderRadius:11, border:"none",
+              fontFamily:"inherit", fontSize:15, fontWeight:700, cursor: canSubmit ? "pointer" : "not-allowed",
+              letterSpacing:"-0.01em",
+              background: canSubmit ? "#111827" : "#F3F4F6",
+              color:      canSubmit ? "#fff"    : "#C4C9D4",
+              transition:"background 0.15s, color 0.15s",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+            {submitting ? <><Spinner /> Submitting…</> : "Submit"}
+          </button>
+        </div>
       </div>
     </div>
   );
