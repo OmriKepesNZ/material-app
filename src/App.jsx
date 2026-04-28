@@ -1418,9 +1418,7 @@ This cannot be undone.`;
       if (bNav === productId) setBNav(null);
     } catch(err) {
       console.error("Delete failed:", err);
-      alert("Could not delete — please try again.
-
-" + err.message);
+      alert("Could not delete — please try again.\n\n" + err.message);
     }
   }
 
