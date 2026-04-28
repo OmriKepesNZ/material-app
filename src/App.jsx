@@ -1822,7 +1822,7 @@ This cannot be undone.`;
                           </div>
                           <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>No products yet</div>
                           <div style={{ color:"#9CA3AF", fontSize:13 }}>
-                            {view==="factory" ? "Use "Add product" to get started" : "No products have been set up yet"}
+                            {view==="factory" ? "Use \"Add product\" to get started" : "No products have been set up yet"}
                           </div>
                         </div>
                       )}
