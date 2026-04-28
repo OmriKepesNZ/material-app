@@ -5,6 +5,24 @@ import { loadAllData, createRecord, updateRecord, uploadImage, deleteProduct,
 // --- Constants ----------------------------------------------------------------
 const MATERIAL_TYPES = ["Lab Dip", "Trim", "Fabric Swatch"];
 const COURIER_OPTIONS = ["DHL", "FedEx", "UPS", "Other"];
+
+// Format YYYY-MM-DD → "7 Apr 2026"
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" });
+}
+
+// Relative time: "Today", "Yesterday", "3d ago"
+function relativeDate(dateStr) {
+  if (!dateStr) return "";
+  const days = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days}d ago`;
+  return formatDate(dateStr);
+}
 const SEASONS = ["SS25", "FW25", "SS26", "FW26"];
 
 const STATUS_COLORS = {
@@ -682,12 +700,12 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
                   <rect x="3" y="3" width="18" height="18" rx="2"/>
                   <circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
                 </svg>
-                <span style={{ fontSize:12, color:"#C4C9D4" }}>No photo</span>
+                <span style={{ fontSize:12, color:"#C4C9D4", fontWeight:500 }}>No photo uploaded</span>
               </div>
           }
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
-            {[["Factory",material.factoryName||"—"],["Submitted",v.submissionDate||"—"],["Type",material.materialType||"—"]].map(([k,val])=>(
+            {[["Factory",material.factoryName||"—"],["Submitted",formatDate(v.submissionDate)],["Type",material.materialType||"—"]].map(([k,val])=>(
               <div key={k} style={{ background:"#F9FAFB", borderRadius:8, padding:"10px 12px" }}>
                 <div style={{ fontSize:10, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase",
                   letterSpacing:"0.06em", marginBottom:3 }}>{k}</div>
@@ -896,14 +914,29 @@ export default function App() {
   const [showNewGs,   setShowNewGs]   = useState(false);
   const [gSearch,     setGSearch]     = useState("");
 
+  const [gError, setGError] = useState(null);
+
   // Load garment samples when section switches to "samples"
   useEffect(() => {
     if (section !== "samples" || gSamples.length > 0) return;
     setGLoading(true);
+    setGError(null);
     loadGarmentSamples()
       .then(data => { setGSamples(data); setGLoading(false); })
-      .catch(err  => { console.error("Garment samples load error:", err); setGLoading(false); });
+      .catch(err  => {
+        console.error("Garment samples load error:", err);
+        setGError(err.message);
+        setGLoading(false);
+      });
   }, [section]);
+
+  function retryGarmentSamples() {
+    setGError(null);
+    setGLoading(true);
+    loadGarmentSamples()
+      .then(data => { setGSamples(data); setGLoading(false); })
+      .catch(err  => { setGError(err.message); setGLoading(false); });
+  }
 
   const gSelectedSample = gSelected ? gSamples.find(s => s.id === gSelected) : null;
 
@@ -1361,28 +1394,33 @@ export default function App() {
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
-    const hasSubmissions = product.materialIds.some(id => {
+    const submissionCount = product.materialIds.filter(id => {
       const m = materials.find(x => x.id === id);
       return m && m.materialName !== "__empty__" && m.versions.length > 0;
-    });
+    }).length;
 
-    const confirmed = hasSubmissions
-      ? window.confirm(`Delete "${product.name}" and all its submissions? This cannot be undone.`)
-      : window.confirm(`Delete "${product.name}"?`);
-    if (!confirmed) return;
+    const msg = submissionCount > 0
+      ? `Delete "${product.name}"?
+
+This will permanently delete the product and ${submissionCount} material submission${submissionCount !== 1 ? "s" : ""}. This cannot be undone.`
+      : `Delete "${product.name}"?
+
+This cannot be undone.`;
+
+    if (!window.confirm(msg)) return;
 
     try {
-      const airtableProductId = product.airtableProductId;
-      if (airtableProductId) {
-        await deleteProduct(airtableProductId);
+      if (product.airtableProductId) {
+        await deleteProduct(product.airtableProductId);
       }
-      // Remove from local state
       setMaterials(p => p.filter(m => !product.materialIds.includes(m.id)));
-      // If we're navigated inside this product, go home
       if (nav === productId) setNav(null);
+      if (bNav === productId) setBNav(null);
     } catch(err) {
       console.error("Delete failed:", err);
-      alert("Could not delete product: " + err.message);
+      alert("Could not delete — please try again.
+
+" + err.message);
     }
   }
 
@@ -1549,20 +1587,53 @@ export default function App() {
   const icoCheck = <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
 
   // ---- loading / error screens ----
+  const screenStyle = { display:"flex", alignItems:"center", justifyContent:"center",
+    height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", background:"#F4F5F7" };
+
   if (loading) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", color:"#9CA3AF", fontSize:14, background:"#F9FAFB" }}>
+    <div style={screenStyle}>
       <div style={{ textAlign:"center" }}>
-        <div style={{ width:32, height:32, border:"2.5px solid #E5E7EB", borderTopColor:"#111827", borderRadius:"50%", animation:"spin 0.7s linear infinite", margin:"0 auto 14px" }} />
-        Loading...
+        <div style={{ width:36, height:36, border:"2.5px solid #E5E7EB",
+          borderTopColor:"#111827", borderRadius:"50%",
+          animation:"spin 0.7s linear infinite", margin:"0 auto 16px" }} />
+        <div style={{ fontSize:14, fontWeight:500, color:"#374151" }}>Loading</div>
+        <div style={{ fontSize:12, color:"#9CA3AF", marginTop:4 }}>Connecting to Airtable…</div>
       </div>
     </div>
   );
+
   if (loadError) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", color:"#EF4444", fontSize:13, background:"#F9FAFB", padding:24 }}>
-      <div style={{ textAlign:"center", maxWidth:360 }}>
-        <div style={{ fontWeight:600, marginBottom:8 }}>Could not connect to Airtable</div>
-        <div style={{ color:"#9CA3AF", lineHeight:1.6 }}>{loadError}</div>
-        <div style={{ color:"#C4C9D4", fontSize:11.5, marginTop:12 }}>Check your AIRTABLE_TOKEN and AIRTABLE_BASE_ID in Vercel environment variables.</div>
+    <div style={screenStyle}>
+      <div style={{ textAlign:"center", maxWidth:380, padding:24 }}>
+        <div style={{ width:48, height:48, borderRadius:12, background:"#FEF2F2",
+          display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+          <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
+            stroke="#EF4444" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div style={{ fontSize:15, fontWeight:600, color:"#111827", marginBottom:6 }}>
+          Could not connect to Airtable
+        </div>
+        <div style={{ fontSize:13, color:"#6B7280", lineHeight:1.65, marginBottom:20 }}>
+          {loadError}
+        </div>
+        <div style={{ fontSize:11, color:"#C4C9D4", marginBottom:20, lineHeight:1.6 }}>
+          Check your <code style={{ background:"#F3F4F6", padding:"1px 5px",
+            borderRadius:3, fontFamily:"monospace", fontSize:11 }}>AIRTABLE_TOKEN</code> and{" "}
+          <code style={{ background:"#F3F4F6", padding:"1px 5px",
+            borderRadius:3, fontFamily:"monospace", fontSize:11 }}>AIRTABLE_BASE_ID</code>{" "}
+          in Vercel environment variables.
+        </div>
+        <button
+          onClick={() => { setLoadError(null); setLoading(true); loadAllData().then(d=>{setMaterials(d);setLoading(false);}).catch(e=>{setLoadError(e.message);setLoading(false);}); }}
+          style={{ padding:"10px 24px", background:"#111827", color:"#fff",
+            border:"none", borderRadius:8, fontSize:13, fontWeight:600,
+            cursor:"pointer", fontFamily:"inherit" }}>
+          Retry
+        </button>
       </div>
     </div>
   );
@@ -1741,10 +1812,20 @@ export default function App() {
                         </div>
                       )}
                       {products.length===0 && !addingProduct && (
-                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
-                          <div style={{ fontSize:32, marginBottom:10 }}>🎉</div>
-                          <div style={{ fontWeight:700, fontSize:15, color:"#111827", marginBottom:6 }}>No products yet</div>
-                          <div style={{ color:"#9CA3AF", fontSize:13 }}>Add a product to start tracking material approvals</div>
+                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
+                          <div style={{ width:48, height:48, borderRadius:12, background:"#F3F4F6",
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            margin:"0 auto 16px" }}>
+                            <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
+                              stroke="#9CA3AF" strokeWidth="1.6">
+                              <rect x="2" y="7" width="20" height="14" rx="2"/>
+                              <path d="M16 3H8l-2 4h12l-2-4z"/>
+                            </svg>
+                          </div>
+                          <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>No products yet</div>
+                          <div style={{ color:"#9CA3AF", fontSize:13 }}>
+                            {view==="factory" ? "Use "Add product" to get started" : "No products have been set up yet"}
+                          </div>
                         </div>
                       )}
                       <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
@@ -1763,7 +1844,7 @@ export default function App() {
                             ? (latestVer.approvalDate || latestVer.submissionDate)
                             : null;
                           const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
-                          const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+                          const timeStr = relativeDate(actionDate);
 
                           // Factory-specific status label: Rejected → Requires Resubmission
                           const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
@@ -1895,10 +1976,17 @@ export default function App() {
                   {!bNav && (
                     <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                       {products.length===0 && (
-                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
-                          <div style={{ fontSize:32, marginBottom:10 }}>🎉</div>
-                          <div style={{ fontWeight:700, fontSize:15, color:"#111827" }}>No pending approvals</div>
-                          <div style={{ color:"#9CA3AF", fontSize:13, marginTop:4 }}>Factory teams are clear.</div>
+                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
+                          <div style={{ width:48, height:48, borderRadius:12, background:"#ECFDF5",
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            margin:"0 auto 16px" }}>
+                            <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
+                              stroke="#10B981" strokeWidth="2">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                          </div>
+                          <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>All clear</div>
+                          <div style={{ color:"#9CA3AF", fontSize:13 }}>Nothing pending your review right now</div>
                         </div>
                       )}
                       {products.map(p => {
@@ -1914,7 +2002,7 @@ export default function App() {
                         const latestVer = latestMat ? latestMat.versions[latestMat.versions.length-1] : null;
                         const displayDate = latestVer ? (latestVer.approvalDate || latestVer.submissionDate) : null;
                         const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
-                        const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+                        const timeStr = relativeDate(actionDate);
 
                         const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
                         const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
@@ -1985,6 +2073,17 @@ export default function App() {
                           <FilterBar />
                         </div>
                         <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
+                        {scopedMaterials.filter(m => m.materialName!=="__empty__").length === 0 && (
+                          <div style={{ padding:"48px 24px", textAlign:"center",
+                            background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
+                            <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:4 }}>
+                              No submissions for this product
+                            </div>
+                            <div style={{ color:"#9CA3AF", fontSize:13 }}>
+                              Waiting for the factory to submit
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   )}
@@ -2049,17 +2148,45 @@ export default function App() {
                   placeholder="Search samples, products, factories..." />
 
                 {/* Sample cards */}
-                {gSamples.length === 0 ? (
+                {gLoading ? (
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+                    padding:60, color:"#9CA3AF", gap:12 }}>
+                    <div style={{ width:20, height:20, border:"2px solid #E5E7EB",
+                      borderTopColor:"#111827", borderRadius:"50%",
+                      animation:"spin 0.7s linear infinite" }} />
+                    <span style={{ fontSize:13 }}>Loading samples…</span>
+                  </div>
+                ) : gError ? (
+                  <div style={{ padding:"40px 24px", textAlign:"center",
+                    background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
+                    <div style={{ fontSize:13, color:"#EF4444", marginBottom:12 }}>
+                      Could not load garment samples
+                    </div>
+                    <button onClick={retryGarmentSamples}
+                      style={{ padding:"8px 20px", background:"#111827", color:"#fff",
+                        border:"none", borderRadius:7, fontSize:13, fontWeight:500,
+                        cursor:"pointer", fontFamily:"inherit" }}>
+                      Retry
+                    </button>
+                  </div>
+                ) : gSamples.length === 0 ? (
                   <div style={{ padding:"64px 24px", textAlign:"center",
                     background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
-                    <div style={{ fontSize:32, marginBottom:10 }}>👕</div>
-                    <div style={{ fontWeight:700, fontSize:15, color:"#111827", marginBottom:6 }}>
+                    <div style={{ width:48, height:48, borderRadius:12,
+                      background:"#F3F4F6", display:"flex", alignItems:"center",
+                      justifyContent:"center", margin:"0 auto 16px" }}>
+                      <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
+                        stroke="#9CA3AF" strokeWidth="1.6">
+                        <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/>
+                      </svg>
+                    </div>
+                    <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>
                       No garment samples yet
                     </div>
                     <div style={{ color:"#9CA3AF", fontSize:13 }}>
                       {view==="factory"
                         ? "Submit your first sample to get started"
-                        : "No samples awaiting review"}
+                        : "Nothing to review right now"}
                     </div>
                   </div>
                 ) : (
@@ -2089,10 +2216,7 @@ export default function App() {
 
                         // Date display
                         const actionDate = latest?.brandDecision?.date || latest?.dateReceived;
-                        const dAgo = actionDate ? (() => {
-                          const d = Math.floor((Date.now()-new Date(actionDate))/(1000*60*60*24));
-                          if (d===0) return "Today"; if (d===1) return "Yesterday"; return `${d}d ago`;
-                        })() : "";
+                        const dAgo = relativeDate(actionDate);
                         const dateLabel = latest?.brandDecision
                           ? (latest.brandDecision.type==="Approved" ? "Approved" :
                              latest.brandDecision.type==="New Sample Requested" ? "Requested" : "Reviewed")
@@ -2970,8 +3094,8 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
             <div style={{fontSize:12,color:"#9CA3AF",display:"flex",gap:4,flexWrap:"wrap"}}>
               <span>{sample.factory||""}</span>
               {sample.factory&&<span style={{color:"#E5E7EB"}}>·</span>}
-              <span>Sent {ver.dateReceived}</span>
-              {d&&<><span style={{color:"#E5E7EB"}}>·</span><span>Reviewed {d.date}</span></>}
+              <span>Sent {formatDate(ver.dateReceived)}</span>
+              {d&&<><span style={{color:"#E5E7EB"}}>·</span><span>Reviewed {formatDate(d.date)}</span></>}
             </div>
           </div>
           {view==="brand"&&isLatest&&!d&&(
