@@ -46,152 +46,6 @@ const GS_STATUS_COLORS = {
   "Rejected":               { bg: "#FEF2F2", text: "#991B1B",  dot: "#EF4444" },
 };
 
-// --- SVG sketch image generators (inline data URIs) ---------------------------
-function makeSVG(content) {
-  return "data:image/svg+xml;utf8," + encodeURIComponent(content);
-}
-
-// Lab dip colour swatches
-const labDip1 = makeSVG(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-  <rect width="400" height="300" fill="#f5f0e8"/>
-  <rect x="40" y="40" width="140" height="140" rx="4" fill="#c8b84a" stroke="#a89830" stroke-width="1.5"/>
-  <rect x="220" y="40" width="140" height="140" rx="4" fill="#d4c455" stroke="#b4a435" stroke-width="1.5"/>
-  <text x="110" y="210" font-family="monospace" font-size="11" fill="#888" text-anchor="middle">LAB DIP V1</text>
-  <text x="290" y="210" font-family="monospace" font-size="11" fill="#888" text-anchor="middle">TARGET REF</text>
-  <text x="110" y="226" font-family="monospace" font-size="10" fill="#aaa" text-anchor="middle">#C8B84A - OLIVE</text>
-  <text x="290" y="226" font-family="monospace" font-size="10" fill="#aaa" text-anchor="middle">#8B9B3A - SPEC</text>
-  <line x1="40" y1="260" x2="360" y2="260" stroke="#ddd" stroke-width="1"/>
-  <text x="200" y="280" font-family="monospace" font-size="10" fill="#bbb" text-anchor="middle">APEX TEXTILES . FW25 . 2025-01-10</text>
-</svg>`);
-
-const labDip2 = makeSVG(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-  <rect width="400" height="300" fill="#f5f0e8"/>
-  <rect x="40" y="40" width="140" height="140" rx="4" fill="#8b9b3a" stroke="#6b7b2a" stroke-width="1.5"/>
-  <rect x="220" y="40" width="140" height="140" rx="4" fill="#8B9B3A" stroke="#6b7b2a" stroke-width="1.5" stroke-dasharray="4 2"/>
-  <text x="110" y="210" font-family="monospace" font-size="11" fill="#888" text-anchor="middle">LAB DIP V2</text>
-  <text x="290" y="210" font-family="monospace" font-size="11" fill="#888" text-anchor="middle">TARGET REF</text>
-  <text x="110" y="226" font-family="monospace" font-size="10" fill="#aaa" text-anchor="middle">#8B9B3A - OLIVE V2</text>
-  <text x="200" y="280" font-family="monospace" font-size="10" fill="#bbb" text-anchor="middle">APEX TEXTILES . FW25 . 2025-01-22</text>
-</svg>`);
-
-// Woven label sketches
-const label1 = makeSVG(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-  <rect width="400" height="300" fill="#f8f6f2"/>
-  <rect x="100" y="60" width="200" height="120" rx="3" fill="#fff" stroke="#ccc" stroke-width="1.5"/>
-  <rect x="100" y="60" width="200" height="28" rx="3" fill="#222"/>
-  <text x="200" y="79" font-family="serif" font-size="13" fill="#fff" text-anchor="middle" letter-spacing="3">TRAIL PANT</text>
-  <text x="200" y="115" font-family="serif" font-size="9" fill="#999" text-anchor="middle" font-weight="300" letter-spacing="1">APEX TEXTILES CO.</text>
-  <text x="200" y="133" font-family="monospace" font-size="8" fill="#bbb" text-anchor="middle">100% NYLON . MADE IN VIETNAM</text>
-  <text x="200" y="151" font-family="monospace" font-size="8" fill="#bbb" text-anchor="middle">WASH COLD . DO NOT BLEACH</text>
-  <text x="200" y="220" font-family="monospace" font-size="10" fill="#aaa" text-anchor="middle">MAIN LABEL V1 - FONT WT LIGHT</text>
-  <text x="200" y="280" font-family="monospace" font-size="10" fill="#bbb" text-anchor="middle">APEX TEXTILES . FW25 . 2025-01-08</text>
-</svg>`);
-
-const label2 = makeSVG(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-  <rect width="400" height="300" fill="#f8f6f2"/>
-  <rect x="100" y="60" width="200" height="120" rx="3" fill="#fff" stroke="#ccc" stroke-width="1.5"/>
-  <rect x="100" y="60" width="200" height="28" rx="3" fill="#222"/>
-  <text x="200" y="79" font-family="serif" font-size="14" fill="#fff" text-anchor="middle" font-weight="bold" letter-spacing="3">TRAIL PANT</text>
-  <text x="200" y="112" font-family="serif" font-size="10" fill="#666" text-anchor="middle" font-weight="bold" letter-spacing="2">APEX TEXTILES CO.</text>
-  <text x="200" y="132" font-family="monospace" font-size="8" fill="#bbb" text-anchor="middle">100% NYLON . MADE IN VIETNAM</text>
-  <text x="200" y="150" font-family="monospace" font-size="8" fill="#bbb" text-anchor="middle">WASH COLD . DO NOT BLEACH</text>
-  <text x="200" y="220" font-family="monospace" font-size="10" fill="#aaa" text-anchor="middle">MAIN LABEL V2 - BOLD, LOGO OFF-CENTER</text>
-  <text x="200" y="280" font-family="monospace" font-size="10" fill="#bbb" text-anchor="middle">APEX TEXTILES . FW25 . 2025-01-19</text>
-</svg>`);
-
-const label3 = makeSVG(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-  <rect width="400" height="300" fill="#f8f6f2"/>
-  <rect x="100" y="60" width="200" height="120" rx="3" fill="#fff" stroke="#ccc" stroke-width="1.5"/>
-  <rect x="100" y="60" width="200" height="28" rx="3" fill="#222"/>
-  <text x="200" y="79" font-family="serif" font-size="14" fill="#fff" text-anchor="middle" font-weight="bold" letter-spacing="3">TRAIL PANT</text>
-  <circle cx="200" cy="118" r="14" fill="none" stroke="#222" stroke-width="1.5"/>
-  <text x="200" y="122" font-family="serif" font-size="9" fill="#222" text-anchor="middle" font-weight="bold">AP</text>
-  <text x="200" y="148" font-family="monospace" font-size="8" fill="#bbb" text-anchor="middle">100% NYLON . MADE IN VIETNAM</text>
-  <text x="200" y="162" font-family="monospace" font-size="8" fill="#bbb" text-anchor="middle">WASH COLD . DO NOT BLEACH</text>
-  <text x="200" y="220" font-family="monospace" font-size="10" fill="#4a9" text-anchor="middle">MAIN LABEL V3 - v APPROVED</text>
-  <text x="200" y="280" font-family="monospace" font-size="10" fill="#bbb" text-anchor="middle">APEX TEXTILES . FW25 . 2025-02-01</text>
-</svg>`);
-
-// Zipper pull sketch
-const zipper1 = makeSVG(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-  <rect width="400" height="300" fill="#f2f2f2"/>
-  <rect x="160" y="50" width="80" height="14" rx="3" fill="#1a1a1a"/>
-  <rect x="170" y="64" width="60" height="110" rx="6" fill="#2a2a2a" stroke="#111" stroke-width="1.5"/>
-  <rect x="178" y="72" width="44" height="94" rx="4" fill="#1a1a1a"/>
-  <ellipse cx="200" cy="185" rx="18" ry="6" fill="#333"/>
-  <circle cx="200" cy="191" r="8" fill="#2a2a2a" stroke="#111" stroke-width="1"/>
-  <circle cx="200" cy="191" r="3" fill="#111"/>
-  <line x1="200" y1="199" x2="200" y2="220" stroke="#222" stroke-width="2.5"/>
-  <text x="200" y="248" font-family="monospace" font-size="10" fill="#888" text-anchor="middle">YKK #5 ZIPPER PULL V1</text>
-  <text x="200" y="264" font-family="monospace" font-size="10" fill="#aaa" text-anchor="middle">MATTE BLACK FINISH</text>
-  <text x="200" y="285" font-family="monospace" font-size="10" fill="#bbb" text-anchor="middle">SUMMIT FABRICS . FW25 . 2025-02-10</text>
-</svg>`);
-
-// Fabric swatch sketch
-const swatch1 = makeSVG(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-  <rect width="400" height="300" fill="#eef0f2"/>
-  <rect x="60" y="40" width="280" height="180" rx="4" fill="#d0d8e0" stroke="#b8c0ca" stroke-width="1.5"/>
-  <line x1="60" y1="60" x2="340" y2="60" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="60" y1="80" x2="340" y2="80" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="60" y1="100" x2="340" y2="100" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="60" y1="120" x2="340" y2="120" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="60" y1="140" x2="340" y2="140" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="60" y1="160" x2="340" y2="160" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="60" y1="180" x2="340" y2="180" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="80" y1="40" x2="80" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="100" y1="40" x2="100" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="120" y1="40" x2="120" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="140" y1="40" x2="140" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="160" y1="40" x2="160" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="180" y1="40" x2="180" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="200" y1="40" x2="200" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="220" y1="40" x2="220" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="240" y1="40" x2="240" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="260" y1="40" x2="260" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="280" y1="40" x2="280" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="300" y1="40" x2="300" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <line x1="320" y1="40" x2="320" y2="220" stroke="#c0c8d2" stroke-width="0.5"/>
-  <text x="200" y="252" font-family="monospace" font-size="10" fill="#888" text-anchor="middle">3L SHELL FABRIC V1 . 75D RIPSTOP</text>
-  <text x="200" y="268" font-family="monospace" font-size="10" fill="#aaa" text-anchor="middle">DWR TREATED . 10K/10K</text>
-  <text x="200" y="285" font-family="monospace" font-size="10" fill="#bbb" text-anchor="middle">SUMMIT FABRICS . FW25 . 2025-02-12</text>
-</svg>`);
-
-// --- Seed Data ---------------------------------------------------------------
-const seedMaterials = [
-  {
-    id: 1, styleName: "Trail Pant", season: "FW25", factoryName: "Apex Textiles",
-    materialType: "Lab Dip", materialName: "Olive",
-    versions: [
-      { version: 1, submissionDate: "2025-01-10", image: labDip1, factoryNotes: "First attempt at olive colorway.", status: "Rejected", brandComment: "Too yellow-green - need more grey undertone.", approvalDate: "2025-01-15", courier: "DHL", trackingNumber: "1234567890", shipmentStatus: "Delivered" },
-      { version: 2, submissionDate: "2025-01-22", image: labDip2, factoryNotes: "Reduced yellow, added grey pigment.", status: "Pending", brandComment: "", approvalDate: null, courier: "DHL", trackingNumber: "9876543210", shipmentStatus: "Delivered" },
-    ],
-  },
-  {
-    id: 2, styleName: "Trail Pant", season: "FW25", factoryName: "Apex Textiles",
-    materialType: "Trim", materialName: "Main Woven Label",
-    versions: [
-      { version: 1, submissionDate: "2025-01-08", image: label1, factoryNotes: "Standard woven label per spec.", status: "Rejected", brandComment: "Font weight too light. Needs bolder.", approvalDate: "2025-01-12", courier: "FedEx", trackingNumber: "FX112233", shipmentStatus: "Delivered" },
-      { version: 2, submissionDate: "2025-01-19", image: label2, factoryNotes: "Updated font weight to bold.", status: "Rejected", brandComment: "Better - but logo placement is off-center.", approvalDate: "2025-01-24", courier: "FedEx", trackingNumber: "FX445566", shipmentStatus: "Delivered" },
-      { version: 3, submissionDate: "2025-02-01", image: label3, factoryNotes: "Logo recentered, font bold.", status: "Approved", brandComment: "Perfect. Approved for production.", approvalDate: "2025-02-05", courier: "UPS", trackingNumber: "UPS778899", shipmentStatus: "Delivered" },
-    ],
-  },
-  {
-    id: 3, styleName: "Rain Jacket", season: "FW25", factoryName: "Summit Fabrics",
-    materialType: "Trim", materialName: "YKK Zipper Pull",
-    versions: [
-      { version: 1, submissionDate: "2025-02-10", image: zipper1, factoryNotes: "YKK #5, matte black finish.", status: "Rejected", brandComment: "Need gunmetal, not matte black.", approvalDate: "2025-02-14", courier: "DHL", trackingNumber: "", shipmentStatus: "At Factory" },
-    ],
-  },
-  {
-    id: 4, styleName: "Rain Jacket", season: "FW25", factoryName: "Summit Fabrics",
-    materialType: "Fabric Swatch", materialName: "3L Shell Fabric",
-    versions: [
-      { version: 1, submissionDate: "2025-02-12", image: swatch1, factoryNotes: "3-layer shell, 75D ripstop, DWR treated.", status: "Pending", brandComment: "", approvalDate: null, courier: "DHL", trackingNumber: "DHL334455", shipmentStatus: "In Transit" },
-    ],
-  },
-];
-
-
 // --- Tiny helpers -------------------------------------------------------------
 function Badge({ status, type = "approval" }) {
   const c = (type === "approval" ? STATUS_COLORS : SHIP_COLORS)[status] || { bg: "#F3F4F6", text: "#374151", dot: "#9CA3AF" };
@@ -1440,8 +1294,6 @@ This cannot be undone.`;
 
   // ---- style constants ----
   const inp = { padding:"7px 10px", border:"1px solid #E5E7EB", borderRadius:6, fontSize:12, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none" };
-  const addBtn = { display:"flex", alignItems:"center", gap:6, padding:"8px 15px", background:"#111827", color:"#fff", border:"none", borderRadius:7, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
-  const ddArrow = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")";
   const chevron = <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>;
 
   // ---- icons ----
@@ -1456,7 +1308,7 @@ This cannot be undone.`;
       <div style={{ display:"flex", gap:7, flex:1 }}>
         {[{ key:"type", options:MATERIAL_TYPES, ph:"Type" }, { key:"status", options:["Pending","Approved","Rejected"], ph:"Status" }].map(({ key, options, ph }) => (
           <select key={key} value={filters[key]} onChange={e => setFilters(f => ({ ...f, [key]:e.target.value }))}
-            style={{ ...inp, minWidth:100, color:filters[key]?"#111827":"#9CA3AF", backgroundImage:ddArrow, backgroundRepeat:"no-repeat", backgroundPosition:"right 7px center", paddingRight:24 }}>
+            style={{ ...inp, minWidth:100, color:filters[key]?"#111827":"#9CA3AF" }}>
             <option value="">{ph}</option>
             {options.map(o => <option key={o}>{o}</option>)}
           </select>
@@ -1582,7 +1434,6 @@ This cannot be undone.`;
   }
   function BCSep() { return <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2" style={{ flexShrink:0 }}><polyline points="9 18 15 12 9 6"/></svg>; }
 
-  const icoCheck = <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>;
 
   // ---- loading / error screens ----
   const screenStyle = { display:"flex", alignItems:"center", justifyContent:"center",
@@ -1664,26 +1515,26 @@ This cannot be undone.`;
           <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
             <div style={{ width:24, height:24, background:"#111827", borderRadius:6, display:"flex",
               alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              {icoCheck}
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             </div>
 
             {section === "materials" && view === "factory" && (
               <>
-                <BCBtn label="Approvals" dim={!!nav} onClick={goHome} />
+                <BCBtn label="Materials" dim={!!nav} onClick={goHome} />
                 {curProduct && <><BCSep/><BCBtn label={curProduct.name} dim={!!selectedMaterial} onClick={selectedMaterial ? () => setSelected(null) : null} /></>}
                 {curProduct && selectedMaterial && <><BCSep/><BCBtn label={selectedMaterial.materialName} dim={false} onClick={null} /></>}
               </>
             )}
             {section === "materials" && view === "brand" && (
               <>
-                <BCBtn label="Approvals" dim={!!bNav} onClick={bGoHome} />
+                <BCBtn label="Materials" dim={!!bNav} onClick={bGoHome} />
                 {curBProduct && <><BCSep/><BCBtn label={curBProduct.name} dim={!!selectedMaterial} onClick={selectedMaterial ? () => setSelected(null) : null} /></>}
                 {curBProduct && selectedMaterial && <><BCSep/><BCBtn label={selectedMaterial.materialName} dim={false} onClick={null} /></>}
               </>
             )}
             {section === "samples" && (
               <>
-                <BCBtn label="Approvals" dim={!!gSelected} onClick={() => { setGSelected(null); setGSearch(""); }} />
+                <BCBtn label="Garment Samples" dim={!!gSelected} onClick={() => { setGSelected(null); setGSearch(""); }} />
                 {gSelectedSample && <><BCSep/><BCBtn label={gSelectedSample.productName} dim={false} onClick={null} /></>}
               </>
             )}
@@ -1841,8 +1692,7 @@ This cannot be undone.`;
                           const displayDate = latestVer
                             ? (latestVer.approvalDate || latestVer.submissionDate)
                             : null;
-                          const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
-                          const timeStr = relativeDate(actionDate);
+                          const timeStr = relativeDate(displayDate);
 
                           // Factory-specific status label: Rejected → Requires Resubmission
                           const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
@@ -2098,45 +1948,30 @@ This cannot be undone.`;
         {/* ===== GARMENT SAMPLES SECTION ===== */}
         {section === "samples" && (
           <>
-            {gLoading ? (
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                padding:60, color:"#9CA3AF", gap:10 }}>
-                <Spinner /> Loading samples...
-              </div>
-            ) : gSelectedSample ? (
+            {gSelectedSample ? (
               <GsDetail
                 key={gSelectedSample.id}
                 sample={gSelectedSample}
                 view={view}
-                onBack={() => setGSelected(null)}
+                onBack={() => { setGSelected(null); setGSearch(""); }}
                 onDecide={handleGsDecide}
                 onSubmitVersion={handleGsNewVersion}
               />
             ) : (
               <>
-                {/* Dashboard header */}
-                <div style={{ display:"flex", alignItems:"flex-start",
-                  justifyContent:"space-between", marginBottom:24 }}>
-                  <div>
-                    <div style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.03em",
-                      color:"#0F1117", lineHeight:1.1 }}>Garment Samples</div>
-                    <div style={{ fontSize:13, color:"#8B909A", marginTop:5, fontWeight:500 }}>
-                      {gSamples.filter(s=>s.status==="Awaiting Review").length} to review
-                      {" · "}{gSamples.length} total
-                    </div>
-                  </div>
+                {/* Header — matches materials layout exactly */}
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                  <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:500 }}>
+                    {gSamples.length} sample{gSamples.length!==1?"s":""}
+                    {gSamples.filter(s=>s.status==="Awaiting Review").length > 0 &&
+                      ` · ${gSamples.filter(s=>s.status==="Awaiting Review").length} to review`}
+                  </span>
                   {view === "factory" && (
                     <button onClick={() => setShowNewGs(true)}
-                      style={{ display:"flex", alignItems:"center", gap:6,
-                        padding:"8px 15px", background:"#0F1117", color:"#fff",
-                        border:"none", borderRadius:7, fontSize:13, fontWeight:600,
-                        cursor:"pointer", fontFamily:"inherit" }}>
-                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.8">
-                        <line x1="12" y1="5" x2="12" y2="19"/>
-                        <line x1="5" y1="12" x2="19" y2="12"/>
-                      </svg>
-                      Submit sample
+                      style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+                        background:"#111827", color:"#fff", border:"none", borderRadius:7,
+                        fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                      {ICO.plus()} Submit sample
                     </button>
                   )}
                 </div>
@@ -2148,10 +1983,8 @@ This cannot be undone.`;
                 {/* Sample cards */}
                 {gLoading ? (
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                    padding:60, color:"#9CA3AF", gap:12 }}>
-                    <div style={{ width:20, height:20, border:"2px solid #E5E7EB",
-                      borderTopColor:"#111827", borderRadius:"50%",
-                      animation:"spin 0.7s linear infinite" }} />
+                    padding:60, color:"#9CA3AF", gap:10 }}>
+                    <Spinner />
                     <span style={{ fontSize:13 }}>Loading samples…</span>
                   </div>
                 ) : gError ? (
@@ -2188,7 +2021,7 @@ This cannot be undone.`;
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                     {gSamples
                       .filter(s => {
                         if (!gSearch.trim()) return true;
@@ -2224,7 +2057,7 @@ This cannot be undone.`;
                         const thumb = latest?.photos?.[0]?.url || latest?.photos?.[0]?.dataUrl || null;
 
                         return (
-                          <div key={s.id} className="scard"
+                          <div key={s.id} className="prow"
                             onClick={() => setGSelected(s.id)}
                             style={{ background:"#fff", border:"1px solid #E8EAED",
                               borderRadius:14, padding:"14px 18px",
@@ -2274,10 +2107,10 @@ This cannot be undone.`;
                               </div>
                             </div>
 
-                            {/* Button */}
-                            <div onClick={e => e.stopPropagation()} style={{ flexShrink:0 }}>
+                            {/* Actions — matches materials layout */}
+                            <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
                               <button onClick={() => setGSelected(s.id)}
-                                style={{ display:"flex", alignItems:"center", gap:5,
+                                style={{ display:"flex", alignItems:"center", gap:6,
                                   padding:"7px 14px", border:"none", borderRadius:8,
                                   fontSize:12.5, fontWeight:600, cursor:"pointer",
                                   fontFamily:"inherit",
