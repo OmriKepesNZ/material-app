@@ -481,7 +481,7 @@ async function handleReviewSampleVersion(body) {
     [F_SV_REVIEWED_BY]: reviewedBy || "",
     [F_SV_REVIEW_DATE]: reviewDate || new Date().toISOString().slice(0, 10),
     [F_SV_SUMMARY]:     summary    || "",
-    [F_SV_NEXT_STEPS]:  nextSteps  || "",
+    [F_SV_NEXT_STEPS]:  nextSteps === "request-another" ? "Request Another Sample" : nextSteps === "no-more" ? "No More Samples Required" : "",
     // Store comment arrays as JSON strings — cheap, readable, no extra tables needed
     [F_SV_FIT_COMMENTS]: JSON.stringify(fitComments),
     [F_SV_MFG_COMMENTS]: JSON.stringify(mfgComments),
