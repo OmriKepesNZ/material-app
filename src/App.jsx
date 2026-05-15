@@ -748,7 +748,7 @@ const ICO = {
 export default function App() {
 
   const [view,    setView]    = useState("factory"); // "factory" | "brand"
-  const [section, setSection] = useState("materials"); // "materials" | "samples"
+  const [section, setSection] = useState("samples"); // "materials" | "samples"
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -953,7 +953,7 @@ export default function App() {
       }));
     } catch(err) {
       console.error("Failed to submit review:", err);
-      alert("Could not save review. Check console for details.");
+      alert("Could not save review.\n\nError: " + (err?.message || String(err)) + "\n\nCheck that your Airtable Sample Versions table has all required fields (see setup guide).");
     }
   }
 
@@ -1586,10 +1586,10 @@ This cannot be undone.`;
               : gSamples.filter(s => s.status === "New Sample Requested").length;
 
             return [
-              { key:"materials", label:"Materials",      count: matCount,
-                icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
               { key:"samples",   label:"Garment Samples",count: gsCount,
                 icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
+              { key:"materials", label:"Materials",      count: matCount,
+                icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
             ].map(item => (
               <button key={item.key} className="navitem"
                 onClick={() => { setSection(item.key); setGSelected(null); setNav(null); setBNav(null); }}
@@ -1949,14 +1949,16 @@ This cannot be undone.`;
         {section === "samples" && (
           <>
             {gSelectedSample ? (
-              <GsDetail
-                key={gSelectedSample.id}
-                sample={gSelectedSample}
-                view={view}
-                onBack={() => { setGSelected(null); setGSearch(""); }}
-                onDecide={handleGsDecide}
-                onSubmitVersion={handleGsNewVersion}
-              />
+              <div style={{ maxWidth:900 }}>
+                <GsDetail
+                  key={gSelectedSample.id}
+                  sample={gSelectedSample}
+                  view={view}
+                  onBack={() => { setGSelected(null); setGSearch(""); }}
+                  onDecide={handleGsDecide}
+                  onSubmitVersion={handleGsNewVersion}
+                />
+              </div>
             ) : (
               <>
                 {/* Header — matches materials layout exactly */}
@@ -2899,50 +2901,42 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
   };
 
   return (
-    <div style={{background:"#fff",border:"1px solid #E8EAED",borderRadius:16,
-      overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-      {/* Sticky header */}
-      <div style={{padding:"18px 22px 0",borderBottom:"1px solid #F3F4F6",
-        position:"sticky",top:0,background:"#fff",zIndex:2}}>
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
-          <div>
-            <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",
-              color:"#9CA3AF",display:"flex",alignItems:"center",gap:3,fontSize:12,
-              fontFamily:"inherit",padding:0,marginBottom:6}}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>All samples
-            </button>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
-              <span style={{fontSize:17,fontWeight:700,letterSpacing:"-0.02em",color:"#0F1117"}}>{sample.productName}</span>
-              <span style={{padding:"1px 7px",background:isLatest?"#111827":"#F3F4F6",borderRadius:4,
-                fontSize:11,fontWeight:700,color:isLatest?"#fff":"#374151",fontFamily:"monospace"}}>
-                Proto {ver.versionNum}
-              </span>
-              <GsBadge status={ver.status}/>
-              {!isLatest&&<span style={{fontSize:11,color:"#9CA3AF",fontStyle:"italic"}}>— historical view</span>}
-            </div>
-            <div style={{fontSize:12,color:"#9CA3AF",display:"flex",gap:4,flexWrap:"wrap"}}>
-              <span>{sample.factory||""}</span>
-              {sample.factory&&<span style={{color:"#E5E7EB"}}>·</span>}
-              <span>Sent {formatDate(ver.dateReceived)}</span>
-              {d&&<><span style={{color:"#E5E7EB"}}>·</span><span>Reviewed {formatDate(d.date)}</span></>}
-            </div>
-          </div>
+    <div>
+      {/* Breadcrumb header — matches MaterialDetail exactly */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <button onClick={onBack}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
+              display:"flex", alignItems:"center", gap:4, fontSize:13, fontFamily:"inherit", padding:0 }}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <span style={{ fontSize:13, color:"#6B7280" }}>Garment Samples</span>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{sample.productName}</span>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ padding:"2px 8px", background:isLatest?"#111827":"#F3F4F6",
+            borderRadius:4, fontSize:11, fontWeight:700,
+            color:isLatest?"#fff":"#374151", fontFamily:"monospace" }}>
+            Proto {ver.versionNum}
+          </span>
+          <GsBadge status={ver.status}/>
+          {!isLatest&&<span style={{fontSize:11,color:"#9CA3AF",fontStyle:"italic"}}>historical</span>}
           {view==="brand"&&isLatest&&!d&&(
             <button onClick={()=>setShowReview(true)}
-              style={{padding:"8px 16px",background:"#0F1117",color:"#fff",
+              style={{padding:"7px 14px",background:"#0F1117",color:"#fff",
                 border:"none",borderRadius:8,fontSize:13,fontWeight:600,
-                cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                cursor:"pointer",fontFamily:"inherit"}}>
               Review sample
             </button>
           )}
         </div>
       </div>
 
-      {/* Two-column body */}
-      <div style={{padding:"18px 22px 22px",display:"grid",
-        gridTemplateColumns:"1fr 1fr",gap:20}}>
+      {/* Two-column body — matches MaterialDetail layout */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, alignItems:"start" }}>
         {/* Left: photos */}
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div>
@@ -3001,14 +2995,19 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
               </div>
             </div>
           )}
-          {/* Dates */}
-          <div style={card}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div><div style={lbl}>Date sent</div><div style={{fontSize:13,fontWeight:500}}>{ver.dateReceived}</div></div>
-              <div><div style={lbl}>Date reviewed</div>
-                <div style={{fontSize:13,fontWeight:500}}>{d?.date||<span style={{color:"#C4C9D4"}}>Pending</span>}</div>
+          {/* Metadata — matches MaterialDetail 3-col grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
+            {[
+              ["Factory", sample.factory||"—"],
+              ["Sent",    formatDate(ver.dateReceived)],
+              ["Reviewed", d ? formatDate(d.date) : "Pending"],
+            ].map(([k,val])=>(
+              <div key={k} style={{ background:"#F9FAFB", borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+                  letterSpacing:"0.06em", marginBottom:3 }}>{k}</div>
+                <div style={{ fontSize:13, fontWeight:500, color: val==="Pending" ? "#C4C9D4" : "#111827" }}>{val}</div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
 
