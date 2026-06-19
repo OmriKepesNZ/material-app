@@ -2739,9 +2739,10 @@ function GsReviewModal({ sample, versionIdx, onClose, onSubmit }) {
       versionId: ver.airtableId,
       garmentSampleId: sample.id,
       status, nextSteps, summary,
-      fitComments:  fit.filter(r=>r.text.trim()),
-      mfgComments:  mfg.filter(r=>r.text.trim()),
-      obsComments:  obs.filter(r=>r.text.trim()),
+      // Keep a row if it has text OR at least one photo — don't drop photo-only comments
+      fitComments:  fit.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
+      mfgComments:  mfg.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
+      obsComments:  obs.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
       measFile,
     });
     close();
