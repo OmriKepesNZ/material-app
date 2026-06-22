@@ -62,6 +62,18 @@ export async function deleteProduct(productId) {
   return data;
 }
 
+export async function deleteGarmentSample(sampleId) {
+  const res = await fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "deleteGarmentSample", sampleId }),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(`Delete error: ${data.error}`);
+  return data;
+}
+
 // =============================================================================
 // NEW — GARMENT SAMPLE FUNCTIONS
 // Isolated from existing functions above. Safe to add without affecting materials.

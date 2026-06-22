@@ -241,6 +241,29 @@ async function handlePOST(body) {
   return res.json();
 }
 
+// Delete a garment sample and all its versions
+async function handleDeleteGarmentSample(body) {
+  const { sampleId } = body;
+
+  // 1. Find all versions linked to this sample
+  const versionRecords = await fetchAll(TABLE_SAMPLE_VERSIONS);
+  const linked = versionRecords.filter(v => v.fields[F_SV_SAMPLE]?.[0] === sampleId);
+
+  // 2. Delete each version
+  for (const v of linked) {
+    await fetch(`${BASE}/${encodeURIComponent(TABLE_SAMPLE_VERSIONS)}/${v.id}`, {
+      method: "DELETE", headers: atHeaders,
+    });
+  }
+
+  // 3. Delete the parent garment sample record
+  await fetch(`${BASE}/${encodeURIComponent(TABLE_GARMENT_SAMPLES)}/${sampleId}`, {
+    method: "DELETE", headers: atHeaders,
+  });
+
+  return { deleted: true, sampleId };
+}
+
 // Upload a base64 image via Cloudinary unsigned upload.
 async function handleImageUpload(body) {
   const { imageBase64, filename } = body;
@@ -576,6 +599,10 @@ export default async function handler(req, res) {
       }
       if (action === "deleteProduct") {
         const result = await handleDeleteProduct(req.body);
+        return res.status(200).json(result);
+      }
+      if (action === "deleteGarmentSample") {
+        const result = await handleDeleteGarmentSample(req.body);
         return res.status(200).json(result);
       }
 

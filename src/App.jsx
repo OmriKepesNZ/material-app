@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { loadAllData, createRecord, updateRecord, uploadImage, deleteProduct,
-  loadGarmentSamples, createGarmentSample, createSampleVersion, reviewSampleVersion, uploadFile } from "./airtable";
+  loadGarmentSamples, createGarmentSample, createSampleVersion, reviewSampleVersion, uploadFile,
+  deleteGarmentSample } from "./airtable";
 
 // --- Constants ----------------------------------------------------------------
 const MATERIAL_TYPES = ["Lab Dip", "Trim", "Fabric Swatch"];
@@ -954,6 +955,29 @@ export default function App() {
     } catch(err) {
       console.error("Failed to submit review:", err);
       alert("Could not save review.\n\nError: " + (err?.message || String(err)) + "\n\nCheck that your Airtable Sample Versions table has all required fields (see setup guide).");
+    }
+  }
+
+  async function handleDeleteGarmentSample(sampleId) {
+    const sample = gSamples.find(s => s.id === sampleId);
+    if (!sample) return;
+
+    const versionCount = sample.versions.length;
+    const msg = versionCount > 0
+      ? `Delete "${sample.productName}"?\n\nThis will permanently delete the sample and ${versionCount} version${versionCount !== 1 ? "s" : ""}. This cannot be undone.`
+      : `Delete "${sample.productName}"?\n\nThis cannot be undone.`;
+
+    if (!window.confirm(msg)) return;
+
+    try {
+      if (sample.airtableId && !sample.airtableId.startsWith("local_")) {
+        await deleteGarmentSample(sample.airtableId);
+      }
+      setGSamples(p => p.filter(s => s.id !== sampleId));
+      if (gSelected === sampleId) setGSelected(null);
+    } catch(err) {
+      console.error("Delete failed:", err);
+      alert("Could not delete — please try again.\n\n" + err.message);
     }
   }
 
@@ -2111,6 +2135,20 @@ This cannot be undone.`;
 
                             {/* Actions — matches materials layout */}
                             <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
+                              <button onClick={e => { e.stopPropagation(); handleDeleteGarmentSample(s.id); }}
+                                style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6",
+                                  background:"transparent", cursor:"pointer", display:"flex",
+                                  alignItems:"center", justifyContent:"center", color:"#D1D5DB",
+                                  transition:"all 0.12s" }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
+                                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polyline points="3 6 5 6 21 6"/>
+                                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                  <path d="M10 11v6M14 11v6"/>
+                                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                                </svg>
+                              </button>
                               <button onClick={() => setGSelected(s.id)}
                                 style={{ display:"flex", alignItems:"center", gap:6,
                                   padding:"7px 14px", border:"none", borderRadius:8,
