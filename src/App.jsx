@@ -750,6 +750,10 @@ export default function App() {
 
   const [view,    setView]    = useState("factory"); // "factory" | "brand"
   const [section, setSection] = useState("samples"); // "materials" | "samples"
+  // ---- product tabs (open products in sidebar) ----
+  const [openTabs,    setOpenTabs]    = useState([]); // array of product ids
+  const [activeTab,   setActiveTab]   = useState(null); // currently selected product id
+  const [tabSection,  setTabSection]  = useState({}); // { [productId]: "materials" | "samples" }
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -794,6 +798,37 @@ export default function App() {
   }
 
   const gSelectedSample = gSelected ? gSamples.find(s => s.id === gSelected) : null;
+
+  // ---- tab helpers ----
+  function openTab(productId) {
+    setOpenTabs(t => t.includes(productId) ? t : [...t, productId]);
+    setActiveTab(productId);
+    setSelected(null); setGSelected(null);
+    // Load garment samples if not yet loaded
+    if (gSamples.length === 0 && !gLoading) {
+      setGLoading(true);
+      loadGarmentSamples()
+        .then(data => { setGSamples(data); setGLoading(false); })
+        .catch(err  => { setGError(err.message); setGLoading(false); });
+    }
+  }
+  function closeTab(productId, e) {
+    e.stopPropagation();
+    setOpenTabs(t => {
+      const next = t.filter(id => id !== productId);
+      if (activeTab === productId) setActiveTab(next[next.length-1] || null);
+      return next;
+    });
+    if (activeTab === productId) { setSelected(null); setGSelected(null); }
+  }
+  function setTabSectionForActive(sec) {
+    if (!activeTab) return;
+    setTabSection(s => ({ ...s, [activeTab]: sec }));
+    setGSelected(null);
+  }
+
+  const activeProduct = activeTab ? products.find(p => p.id === activeTab) : null;
+  const activeTabSection = activeTab ? (tabSection[activeTab] || "materials") : "materials";
 
   // ---- garment sample mutators ----
   async function handleGsSubmit(data) {
@@ -1535,33 +1570,13 @@ This cannot be undone.`;
         <div style={{ height:56, display:"flex", alignItems:"center",
           justifyContent:"space-between", padding:"0 24px" }}>
 
-          {/* Logo + breadcrumb */}
-          <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
+          {/* Logo + app title */}
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <div style={{ width:24, height:24, background:"#111827", borderRadius:6, display:"flex",
               alignItems:"center", justifyContent:"center", flexShrink:0 }}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             </div>
-
-            {section === "materials" && view === "factory" && (
-              <>
-                <BCBtn label="Materials" dim={!!nav} onClick={goHome} />
-                {curProduct && <><BCSep/><BCBtn label={curProduct.name} dim={!!selectedMaterial} onClick={selectedMaterial ? () => setSelected(null) : null} /></>}
-                {curProduct && selectedMaterial && <><BCSep/><BCBtn label={selectedMaterial.materialName} dim={false} onClick={null} /></>}
-              </>
-            )}
-            {section === "materials" && view === "brand" && (
-              <>
-                <BCBtn label="Materials" dim={!!bNav} onClick={bGoHome} />
-                {curBProduct && <><BCSep/><BCBtn label={curBProduct.name} dim={!!selectedMaterial} onClick={selectedMaterial ? () => setSelected(null) : null} /></>}
-                {curBProduct && selectedMaterial && <><BCSep/><BCBtn label={selectedMaterial.materialName} dim={false} onClick={null} /></>}
-              </>
-            )}
-            {section === "samples" && (
-              <>
-                <BCBtn label="Garment Samples" dim={!!gSelected} onClick={() => { setGSelected(null); setGSearch(""); }} />
-                {gSelectedSample && <><BCSep/><BCBtn label={gSelectedSample.productName} dim={false} onClick={null} /></>}
-              </>
-            )}
+            <span style={{ fontSize:14, fontWeight:700, color:"#111827", letterSpacing:"-0.01em" }}>Approvals</span>
           </div>
 
           {/* Factory / Brand pill toggle */}
@@ -1592,186 +1607,476 @@ This cannot be undone.`;
       <div style={{ display:"flex", flex:1, minHeight:0, overflow:"hidden" }}>
 
         {/* ── Sidebar ── */}
-        <div style={{ width:200, background:"#fff", borderRight:"1px solid #E8EAED",
-          flexShrink:0, padding:"16px 10px", display:"flex", flexDirection:"column", gap:2,
-          overflowY:"auto" }}>
+        <div style={{ width:220, background:"#fff", borderRight:"1px solid #E8EAED",
+          flexShrink:0, display:"flex", flexDirection:"column", overflowY:"auto" }}>
 
-          <div style={{ fontSize:10, fontWeight:700, color:"#C4C9D4", textTransform:"uppercase",
-            letterSpacing:"0.08em", padding:"0 8px", marginBottom:6 }}>Approvals</div>
-
-          {(() => {
-            // Count pending actions based on current view
-            const realMats = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-            const matCount = view === "brand"
-              ? realMats.filter(m => m.versions[m.versions.length-1].status === "Pending").length
-              : realMats.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
-            const gsCount = view === "brand"
-              ? gSamples.filter(s => s.status === "Awaiting Review").length
-              : gSamples.filter(s => s.status === "New Sample Requested").length;
-
-            return [
-              { key:"samples",   label:"Garment Samples",count: gsCount,
-                icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
-              { key:"materials", label:"Materials",      count: matCount,
-                icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
-            ].map(item => (
-              <button key={item.key} className="navitem"
-                onClick={() => { setSection(item.key); setGSelected(null); setNav(null); setBNav(null); }}
-                style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                  padding:"8px 10px", borderRadius:7, border:"none", cursor:"pointer",
-                  fontFamily:"inherit", textAlign:"left", width:"100%",
-                  background: section===item.key ? "#F3F4F6" : "transparent",
-                  transition:"background 0.1s" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ color: section===item.key ? "#0F1117" : "#9CA3AF",
-                    display:"flex", alignItems:"center" }}>{item.icon}</span>
-                  <span style={{ fontSize:13, fontWeight: section===item.key ? 600 : 400,
-                    color: section===item.key ? "#0F1117" : "#6B7280" }}>{item.label}</span>
-                </div>
-                {item.count > 0 && (
-                  <span style={{ fontSize:10, fontWeight:700, minWidth:18, height:18,
-                    borderRadius:9,
-                    background: section===item.key ? "#111827" : "#EF4444",
-                    color: "#fff",
-                    display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px" }}>
-                    {item.count}
-                  </span>
-                )}
+          {/* Factory submit button + home — always at top */}
+          <div style={{ padding:"12px 10px", borderBottom: openTabs.length > 0 ? "1px solid #F3F4F6" : "none" }}>
+            {/* Home button */}
+            <button className="navitem"
+              onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}
+              style={{ display:"flex", alignItems:"center", gap:8, width:"100%",
+                padding:"8px 10px", borderRadius:7, border:"none", cursor:"pointer",
+                fontFamily:"inherit",
+                background: !activeTab ? "#F3F4F6" : "transparent" }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={!activeTab?"#111827":"#9CA3AF"} strokeWidth="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+              <span style={{ fontSize:13, fontWeight: !activeTab ? 600 : 400,
+                color: !activeTab ? "#111827" : "#6B7280" }}>All Products</span>
+            </button>
+            {/* New submission (factory) or placeholder */}
+            {view === "factory" && (
+              <button onClick={() => { if (activeTab) setShowNew(true); else setAddingProduct(true); }}
+                style={{ display:"flex", alignItems:"center", gap:6, width:"100%",
+                  padding:"8px 10px", borderRadius:7, border:"1px solid #E8EAED",
+                  background:"transparent", cursor:"pointer", fontFamily:"inherit",
+                  fontSize:12, fontWeight:600, color:"#374151", marginTop:4 }}>
+                {ICO.plus()}
+                {activeTab ? "New Submission" : "Add Product"}
               </button>
-            ));
-          })()}
+            )}
+          </div>
+
+          {/* Open product tabs */}
+          {openTabs.length > 0 && (
+            <div style={{ padding:"8px 10px", flex:1 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#C4C9D4", textTransform:"uppercase",
+                letterSpacing:"0.08em", padding:"0 4px", marginBottom:6 }}>Open</div>
+              {openTabs.map(tabId => {
+                const p = products.find(x => x.id === tabId);
+                if (!p) return null;
+                const isActive = tabId === activeTab;
+                const mats = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
+                const real = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                const pendingMat = real.filter(m => m.versions[m.versions.length-1].status === (view==="brand"?"Pending":"Rejected")).length;
+                const pendingGs  = gSamples.filter(s => s.productName === p.name &&
+                  s.status === (view==="brand"?"Awaiting Review":"New Sample Requested")).length;
+                const totalPending = pendingMat + pendingGs;
+                const thumb = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                return (
+                  <div key={tabId} onClick={() => { setActiveTab(tabId); setSelected(null); setGSelected(null); }}
+                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                      padding:"7px 8px", borderRadius:7, cursor:"pointer", marginBottom:2,
+                      background: isActive ? "#F3F4F6" : "transparent",
+                      transition:"background 0.1s" }}
+                    onMouseEnter={e => { if(!isActive) e.currentTarget.style.background="#FAFAFA"; }}
+                    onMouseLeave={e => { if(!isActive) e.currentTarget.style.background="transparent"; }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:7, minWidth:0 }}>
+                      {/* Mini thumb */}
+                      <div style={{ width:24, height:24, borderRadius:5, flexShrink:0, overflow:"hidden",
+                        background:"#F3F4F6", border:"1px solid #E8EAED" }}>
+                        {thumb
+                          ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                          : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                              <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>
+                            </div>
+                        }
+                      </div>
+                      <span style={{ fontSize:12.5, fontWeight: isActive ? 600 : 400,
+                        color: isActive ? "#111827" : "#6B7280",
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {p.name}
+                      </span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+                      {totalPending > 0 && (
+                        <span style={{ fontSize:9, fontWeight:700, width:16, height:16, borderRadius:"50%",
+                          background:"#EF4444", color:"#fff", display:"flex", alignItems:"center",
+                          justifyContent:"center" }}>{totalPending}</span>
+                      )}
+                      <button onClick={e => closeTab(tabId, e)}
+                        style={{ width:16, height:16, borderRadius:3, border:"none",
+                          background:"transparent", cursor:"pointer", display:"flex",
+                          alignItems:"center", justifyContent:"center", color:"#C4C9D4",
+                          fontSize:14, lineHeight:1, padding:0 }}
+                        onMouseEnter={e => { e.currentTarget.style.color="#6B7280"; e.currentTarget.style.background="#E5E7EB"; }}
+                        onMouseLeave={e => { e.currentTarget.style.color="#C4C9D4"; e.currentTarget.style.background="transparent"; }}>
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* ── Main scrollable content ── */}
         <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 100px", minWidth:0 }}>
 
         {/* ===== PAGE CONTENT ===== */}
-        <div style={{ maxWidth:900 }}>
+        <div>
 
+        {/* ── HOME: no active tab — show all products ── */}
+        {!activeTab && (
+          <div style={{ maxWidth:900 }}>
+            {/* Factory: new submission button above search when no tabs open */}
+            {view === "factory" && openTabs.length === 0 && (
+              <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+                <button onClick={() => setAddingProduct(true)}
+                  style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px",
+                    background:"#111827", color:"#fff", border:"none", borderRadius:7,
+                    fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  {ICO.plus()} Add product
+                </button>
+              </div>
+            )}
 
+            {/* Global search */}
+            <SearchBar search={search} setSearch={setSearch}
+              placeholder="Search products, materials, suppliers..." />
 
-        {/* ===== MATERIALS SECTION ===== */}
-        {section === "materials" && (<>
-
-        {/* ---- FACTORY VIEW ---- */}
-        {view === "factory" && (
-          <>
-            
-            {/* Search bar */}
-            <SearchBar search={search} setSearch={setSearch} placeholder="Search products, materials, suppliers..." />
-
-            {searchResults !== null
-              ? (<div>
-                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
-                    {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
+            {searchResults !== null ? (
+              <div>
+                <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
+                  {searchResults.length} result{searchResults.length!==1?"s":""} for{" "}
+                  <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
+                </div>
+                <MatTable rows={searchResults} showContext />
+              </div>
+            ) : (
+              <div>
+                {/* Add product inline */}
+                {addingProduct && (
+                  <AddRow placeholder="Product name…"
+                    onAdd={addProduct} onCancel={() => setAddingProduct(false)} />
+                )}
+                {/* Product count */}
+                <div style={{ fontSize:12, color:"#9CA3AF", fontWeight:500, marginBottom:10 }}>
+                  {products.length} product{products.length!==1?"s":""}
+                </div>
+                {/* All product cards */}
+                {products.length === 0 && !addingProduct ? (
+                  <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff",
+                    borderRadius:12, border:"1px solid #E8EAED" }}>
+                    <div style={{ width:48, height:48, borderRadius:12, background:"#F3F4F6",
+                      display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+                      <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.6">
+                        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/>
+                      </svg>
+                    </div>
+                    <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>No products yet</div>
+                    <div style={{ color:"#9CA3AF", fontSize:13 }}>
+                      {view==="factory" ? "Use \"Add product\" to get started" : "No products set up yet"}
+                    </div>
                   </div>
-                  <MatTable rows={searchResults} showContext />
-                 </div>)
-              : <>
-                  {/* L1: product cards */}
-                  {!nav && (
-                    <div>
-                      {view==="factory" && (
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-                          <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:500 }}>
-                            {products.filter(p=>p.materialIds.some(id=>materials.find(m=>m.id===id&&m.materialName!=="__empty__"))).length} products
-                          </span>
-                          <button onClick={()=>setAddingProduct(true)}
-                            style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-                              background:"#111827", color:"#fff", border:"none", borderRadius:7,
-                              fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                            {ICO.plus()} Add product
-                          </button>
-                        </div>
-                      )}
-                      {products.length===0 && !addingProduct && (
-                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
-                          <div style={{ width:48, height:48, borderRadius:12, background:"#F3F4F6",
-                            display:"flex", alignItems:"center", justifyContent:"center",
-                            margin:"0 auto 16px" }}>
-                            <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
-                              stroke="#9CA3AF" strokeWidth="1.6">
-                              <rect x="2" y="7" width="20" height="14" rx="2"/>
-                              <path d="M16 3H8l-2 4h12l-2-4z"/>
-                            </svg>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                    {products.map(p => {
+                      const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
+                      const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                      const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
+                      const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
+                      const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                      const latestVer = real.length > 0 ? real[real.length-1].versions[real[real.length-1].versions.length-1] : null;
+                      const displayDate = latestVer ? (latestVer.approvalDate || latestVer.submissionDate) : null;
+                      const timeStr = relativeDate(displayDate);
+
+                      // Overall product status
+                      const hasPending  = pending > 0;
+                      const hasRejected = rejected > 0;
+                      const overallStatus = hasPending ? "Pending"
+                        : hasRejected ? "Rejected"
+                        : real.length > 0 && real.every(m => m.versions[m.versions.length-1].status === "Approved") ? "Approved"
+                        : real.length === 0 ? "No submissions" : "Mixed";
+                      const sc = STATUS_COLORS[overallStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
+
+                      // Garment sample counts for this product
+                      const gs = gSamples.filter(s => s.productName === p.name);
+                      const gsPending = gs.filter(s => s.status === "Awaiting Review").length;
+
+                      return (
+                        <div key={p.id} className="prow"
+                          onClick={() => openTab(p.id)}
+                          style={{ background:"#fff", border:"1px solid #E8EAED",
+                            borderRadius:14, padding:"14px 18px",
+                            display:"flex", alignItems:"center", gap:14,
+                            boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
+
+                          {/* Thumbnail */}
+                          <div style={{ width:52, height:52, borderRadius:10, flexShrink:0,
+                            overflow:"hidden", background:"#F3F4F6", border:"1px solid #E8EAED",
+                            display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            {thumb
+                              ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                              : <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5">
+                                  <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/>
+                                </svg>
+                            }
                           </div>
-                          <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>No products yet</div>
-                          <div style={{ color:"#9CA3AF", fontSize:13 }}>
-                            {view==="factory" ? "Use \"Add product\" to get started" : "No products have been set up yet"}
+
+                          {/* Info */}
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                              <span style={{ fontSize:14, fontWeight:600, color:"#0F1117", letterSpacing:"-0.01em" }}>
+                                {p.name}
+                              </span>
+                              {real.length > 0 && (
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+                                  padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text,
+                                  fontSize:11, fontWeight:600 }}>
+                                  <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />
+                                  {overallStatus}
+                                </span>
+                              )}
+                              {gsPending > 0 && (
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+                                  padding:"2px 8px", borderRadius:20,
+                                  background:GS_STATUS_COLORS["Awaiting Review"].bg,
+                                  color:GS_STATUS_COLORS["Awaiting Review"].text,
+                                  fontSize:11, fontWeight:600 }}>
+                                  <span style={{ width:5, height:5, borderRadius:"50%", background:GS_STATUS_COLORS["Awaiting Review"].dot }} />
+                                  {gsPending} sample{gsPending!==1?"s":""} to review
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize:12, color:"#8B909A", display:"flex", gap:5, flexWrap:"wrap" }}>
+                              {real.length > 0 && <span>{real.length} material{real.length!==1?"s":""}</span>}
+                              {gs.length > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span>{gs.length} garment sample{gs.length!==1?"s":""}</span></>}
+                              {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{timeStr}</span></>}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
+                            <button onClick={e => { e.stopPropagation(); handleDeleteProduct(p.id); }}
+                              style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6",
+                                background:"transparent", cursor:"pointer", display:"flex",
+                                alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
+                              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                            </button>
+                            <button onClick={() => openTab(p.id)}
+                              style={{ display:"flex", alignItems:"center", gap:5,
+                                padding:"7px 14px", border:"none", borderRadius:8,
+                                fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                                background:"#F3F4F6", color:"#374151" }}>
+                              Open
+                              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                            </button>
                           </div>
                         </div>
-                      )}
-                      <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                        {products.map(p => {
-                          const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
-                          const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-                          const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
-                          const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
-                          const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
-                          const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-                          // Use approvalDate when available (approved/rejected), else submissionDate
-                          const latestMat = real.length > 0 ? real[real.length-1] : null;
-                          const latestVer = latestMat ? latestMat.versions[latestMat.versions.length-1] : null;
-                          const displayDate = latestVer
-                            ? (latestVer.approvalDate || latestVer.submissionDate)
-                            : null;
-                          const timeStr = relativeDate(displayDate);
+        {/* ── PRODUCT TAB: active product open ── */}
+        {activeTab && activeProduct && (
+          <div style={{ maxWidth:900 }}>
+            {/* Product header */}
+            <div style={{ marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+                <button onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}
+                  style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
+                    display:"flex", alignItems:"center", gap:4, fontSize:13, fontFamily:"inherit", padding:0 }}>
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                  All products
+                </button>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{activeProduct.name}</span>
+              </div>
 
-                          // Factory-specific status label: Rejected → Requires Resubmission
-                          const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
-                          const factoryLabel   = dominantStatus === "Rejected" ? "Requires Resubmission" : dominantStatus;
-                          const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
-                          // Resubmission pill gets a distinct orange-red colour
-                          const pillStyle = dominantStatus === "Rejected"
-                            ? { bg:"#FFF3E0", text:"#B45309", dot:"#F97316" }
-                            : sc;
+              {/* Section toggle: Materials / Garment Samples */}
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                {[
+                  { key:"materials", label:"Materials",
+                    icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
+                  { key:"samples",   label:"Garment Samples",
+                    icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
+                ].map(s => (
+                  <button key={s.key} onClick={() => { setTabSectionForActive(s.key); setSelected(null); setGSelected(null); }}
+                    style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+                      borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit",
+                      fontSize:13, fontWeight:600,
+                      background: activeTabSection===s.key ? "#111827" : "#F3F4F6",
+                      color:      activeTabSection===s.key ? "#fff"    : "#6B7280",
+                      transition:"all 0.12s" }}>
+                    {s.icon} {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                          // Button label: only "Review" when brand needs to act (pending).
-                          // Factory has nothing to action on pending — use "Open" instead.
-                          const btnLabel = rejected > 0 ? "Resubmit" : "Open";
-                          const btnStyle = rejected > 0
-                            ? { background:"#0F1117", color:"#fff" }
-                            : { background:"#F3F4F6", color:"#374151" };
+            {/* ── MATERIALS inside product ── */}
+            {activeTabSection === "materials" && (() => {
+              const scopedMats = materials.filter(m =>
+                activeProduct.materialIds.includes(m.id) &&
+                m.materialName !== "__empty__" && m.versions.length > 0
+              ).map(m => ({ ...m, latest: m.versions[m.versions.length-1] }));
+
+              if (selectedMaterial && activeProduct.materialIds.includes(selectedMaterial.id)) {
+                return (
+                  <MaterialDetail
+                    key={selectedMaterial.id}
+                    material={selectedMaterial}
+                    view={view}
+                    onClose={() => setSelected(null)}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    brandComment={brandComment}
+                    setBrandComment={setBrandComment}
+                    setMaterials={setMaterials}
+                    onSubmitNewVersion={handleNewVersion}
+                    showNewVersionFor={showNewVersionFor}
+                    setShowNewVersionFor={setShowNewVersionFor}
+                  />
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center" }}>
+                    <FilterBar />
+                    {view === "factory" && (
+                      <button onClick={() => setShowNew(true)}
+                        style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px",
+                          background:"#111827", color:"#fff", border:"none", borderRadius:7,
+                          fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
+                        {ICO.plus()} New Submission
+                      </button>
+                    )}
+                  </div>
+                  {scopedMats.length === 0 ? (
+                    <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff",
+                      borderRadius:12, border:"1px solid #E8EAED" }}>
+                      <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:4 }}>No submissions yet</div>
+                      {view === "factory" && <div style={{ color:"#9CA3AF", fontSize:13 }}>Use "New Submission" to add the first one</div>}
+                      {view === "brand"   && <div style={{ color:"#9CA3AF", fontSize:13 }}>Waiting for the factory to submit</div>}
+                    </div>
+                  ) : (
+                    <MatTable rows={scopedMats} />
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── GARMENT SAMPLES inside product ── */}
+            {activeTabSection === "samples" && (() => {
+              const productGs = gSamples.filter(s => s.productName === activeProduct.name);
+
+              if (gSelectedSample && gSelectedSample.productName === activeProduct.name) {
+                return (
+                  <div style={{ maxWidth:900 }}>
+                    <GsDetail
+                      key={gSelectedSample.id}
+                      sample={gSelectedSample}
+                      view={view}
+                      onBack={() => setGSelected(null)}
+                      onDecide={handleGsDecide}
+                      onSubmitVersion={handleGsNewVersion}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  {/* Per-product GS search */}
+                  <SearchBar search={gSearch} setSearch={setGSearch}
+                    placeholder={`Search samples in ${activeProduct.name}...`} />
+
+                  {/* Header */}
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                    <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:500 }}>
+                      {productGs.length} sample{productGs.length!==1?"s":""}
+                    </span>
+                    {view === "factory" && (
+                      <button onClick={() => setShowNewGs(true)}
+                        style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+                          background:"#111827", color:"#fff", border:"none", borderRadius:7,
+                          fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                        {ICO.plus()} Submit sample
+                      </button>
+                    )}
+                  </div>
+
+                  {gLoading ? (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:48, gap:10, color:"#9CA3AF" }}>
+                      <Spinner /><span style={{ fontSize:13 }}>Loading samples…</span>
+                    </div>
+                  ) : productGs.length === 0 ? (
+                    <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff",
+                      borderRadius:12, border:"1px solid #E8EAED" }}>
+                      <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:4 }}>No samples yet</div>
+                      <div style={{ color:"#9CA3AF", fontSize:13 }}>
+                        {view==="factory" ? "Submit the first sample to get started" : "Nothing to review right now"}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                      {productGs
+                        .filter(s => {
+                          if (!gSearch.trim()) return true;
+                          const q = gSearch.toLowerCase();
+                          return s.productName.toLowerCase().includes(q) || (s.factory||"").toLowerCase().includes(q);
+                        })
+                        .map(s => {
+                          const latest  = s.versions[s.versions.length-1];
+                          const sc      = GS_STATUS_COLORS[s.status] || GS_STATUS_COLORS["Awaiting Review"];
+                          const factoryLabel = view==="factory" && s.status==="New Sample Requested" ? "Requires Resubmission" : s.status;
+                          const fsc     = view==="factory" && s.status==="New Sample Requested"
+                            ? { bg:"#FFF3E0", text:"#B45309", dot:"#F97316" } : sc;
+                          const btnLabel = view==="brand" ? (s.status==="Awaiting Review" ? "Review sample" : "Open") : (s.status==="New Sample Requested" ? "Resubmit" : "Open");
+                          const btnDark  = (view==="brand" && s.status==="Awaiting Review") || (view==="factory" && s.status==="New Sample Requested");
+                          const actionDate = latest?.brandDecision?.date || latest?.dateReceived;
+                          const dAgo = relativeDate(actionDate);
+                          const dateLabel = latest?.brandDecision ? (latest.brandDecision.type==="Approved" ? "Approved" : "Reviewed") : "Submitted";
+                          const thumb = latest?.photos?.[0]?.url || latest?.photos?.[0]?.dataUrl || null;
 
                           return (
-                            <div key={p.id} className="prow"
-                              onClick={() => goProd(p.id)}
-                              style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:16, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
-                              {/* Thumbnail */}
-                              <div style={{ width:56, height:56, borderRadius:10, background:"#F3F4F6", flexShrink:0, overflow:"hidden", border:"1px solid #E8EAED", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                                {thumb
-                                  ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
-                                  : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                                }
+                            <div key={s.id} className="prow"
+                              onClick={() => setGSelected(s.id)}
+                              style={{ background:"#fff", border:"1px solid #E8EAED",
+                                borderRadius:14, padding:"14px 18px",
+                                display:"flex", alignItems:"center", gap:14,
+                                boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
+                              <div style={{ width:52, height:52, borderRadius:10, flexShrink:0, overflow:"hidden",
+                                background:"#F3F4F6", border:"1px solid #E8EAED",
+                                display:"flex", alignItems:"center", justifyContent:"center" }}>
+                                {thumb ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                                  : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5">
+                                      <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/>
+                                    </svg>}
                               </div>
-                              {/* Info */}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                                  <span style={{ fontSize:15, fontWeight:700, color:"#0F1117", letterSpacing:"-0.02em" }}>{p.name}</span>
-                                  {factoryLabel && (
-                                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:pillStyle.bg, color:pillStyle.text, fontSize:11, fontWeight:600 }}>
-                                      <span style={{ width:5, height:5, borderRadius:"50%", background:pillStyle.dot }} />{factoryLabel}
-                                    </span>
-                                  )}
+                                  <span style={{ fontSize:14, fontWeight:600, color:"#0F1117" }}>{s.productName}</span>
+                                  <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+                                    padding:"2px 8px", borderRadius:20, background:fsc.bg, color:fsc.text, fontSize:11, fontWeight:600 }}>
+                                    <span style={{ width:5, height:5, borderRadius:"50%", background:fsc.dot }} />{factoryLabel}
+                                  </span>
                                 </div>
-                                <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                                  {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
-                                  {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} awaiting brand</span></>}
-                                  {rejected > 0 && pending === 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#F97316", fontWeight:600 }}>{rejected} need{rejected===1?"s":""} resubmission</span></>}
-                                  {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{latestVer?.approvalDate ? "Decided" : "Submitted"} {timeStr}</span></>}
+                                <div style={{ fontSize:12, color:"#8B909A", display:"flex", gap:5, flexWrap:"wrap" }}>
+                                  <span style={{ fontFamily:"monospace", fontSize:11, fontWeight:600, color:"#374151" }}>
+                                    {s.versions.length} version{s.versions.length!==1?"s":""}
+                                  </span>
+                                  {s.factory && <><span style={{ color:"#E5E7EB" }}>·</span><span>{s.factory}</span></>}
+                                  {dAgo && <><span style={{ color:"#E5E7EB" }}>·</span><span>{dateLabel} {dAgo}</span></>}
                                 </div>
                               </div>
-                              {/* Actions */}
                               <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                                <button onClick={e => { e.stopPropagation(); handleDeleteProduct(p.id); }}
-                                  style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
+                                <button onClick={e => { e.stopPropagation(); handleDeleteGarmentSample(s.id); }}
+                                  style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6",
+                                    background:"transparent", cursor:"pointer", display:"flex",
+                                    alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
                                   onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
                                   onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
-                                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                                 </button>
-                                <button onClick={e => { e.stopPropagation(); goProd(p.id); }}
-                                  style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", ...btnStyle }}>
+                                <button onClick={() => setGSelected(s.id)}
+                                  style={{ display:"flex", alignItems:"center", gap:5,
+                                    padding:"7px 14px", border:"none", borderRadius:8,
+                                    fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                                    background: btnDark ? "#0F1117" : "#F3F4F6",
+                                    color:      btnDark ? "#fff"    : "#374151" }}>
                                   {btnLabel}
                                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                                 </button>
@@ -1779,412 +2084,28 @@ This cannot be undone.`;
                             </div>
                           );
                         })}
-                        {addingProduct && (
-                          <div style={{ background:"#fff", border:"1.5px dashed #CBD5E1", borderRadius:14, overflow:"hidden" }}>
-                            <AddRow placeholder="Product name..." onAdd={addProduct} onCancel={() => setAddingProduct(false)} />
-                          </div>
-                        )}
-                      </div>
                     </div>
-                  )}
-
-                  {/* L2: submissions inside a product, or material detail */}
-                  {curProduct && (
-                    selectedMaterial ? (
-                      <MaterialDetail
-                        key={selectedMaterial.id}
-                        material={selectedMaterial}
-                        view={view}
-                        onClose={() => setSelected(null)}
-                        onApprove={handleApprove}
-                        onReject={handleReject}
-                        brandComment={brandComment}
-                        setBrandComment={setBrandComment}
-                        setMaterials={setMaterials}
-                        onSubmitNewVersion={handleNewVersion}
-                        showNewVersionFor={showNewVersionFor}
-                        setShowNewVersionFor={setShowNewVersionFor}
-                      />
-                    ) : (
-                      <div>
-                        <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
-                          <FilterBar />
-                          <button onClick={() => setShowNew(true)}
-                            style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
-                              background:"#111827", color:"#fff", border:"none", borderRadius:7,
-                              fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                            {ICO.plus()} New Submission
-                          </button>
-                        </div>
-                        <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
-                        {scopedMaterials.filter(m => m.materialName!=="__empty__").length === 0 && (
-                          <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff",
-                            borderRadius:12, border:"1px solid #E8EAED" }}>
-                            <div style={{ fontWeight:600, fontSize:14, color:"#9CA3AF" }}>No submissions yet — add the first one</div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  )}
-                </>
-            }
-          </>
-        )}
-
-        {/* ---- BRAND VIEW ---- */}
-        {view === "brand" && (
-          <>
-            
-                        <SearchBar search={search} setSearch={setSearch} placeholder="Search products, materials, suppliers..." />
-
-            {searchResults !== null
-              ? (<div>
-                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
-                    {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
-                  </div>
-                  <MatTable rows={searchResults} showContext />
-                 </div>)
-              : <>
-                  {!bNav && (
-                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                      {products.length===0 && (
-                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
-                          <div style={{ width:48, height:48, borderRadius:12, background:"#ECFDF5",
-                            display:"flex", alignItems:"center", justifyContent:"center",
-                            margin:"0 auto 16px" }}>
-                            <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
-                              stroke="#10B981" strokeWidth="2">
-                              <polyline points="20 6 9 17 4 12"/>
-                            </svg>
-                          </div>
-                          <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>All clear</div>
-                          <div style={{ color:"#9CA3AF", fontSize:13 }}>Nothing pending your review right now</div>
-                        </div>
-                      )}
-                      {products.map(p => {
-                        const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
-                        const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-                        const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
-                        const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
-                        const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
-                        const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
-
-                        // Use approvalDate when available, else submissionDate
-                        const latestMat = real.length > 0 ? real[real.length-1] : null;
-                        const latestVer = latestMat ? latestMat.versions[latestMat.versions.length-1] : null;
-                        const displayDate = latestVer ? (latestVer.approvalDate || latestVer.submissionDate) : null;
-                        const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
-                        const timeStr = relativeDate(actionDate);
-
-                        const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
-                        const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
-
-                        // Brand button: "Review" only when there's something pending to approve/reject
-                        const btnLabel = pending > 0 ? "Review" : "Open";
-                        const btnStyle = pending > 0
-                          ? { background:"#0F1117", color:"#fff" }
-                          : { background:"#F3F4F6", color:"#374151" };
-
-                        return (
-                          <div key={p.id} className="prow"
-                            onClick={() => bGoProd(p.id)}
-                            style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:16, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
-                            <div style={{ width:56, height:56, borderRadius:10, background:"#F3F4F6", flexShrink:0, overflow:"hidden", border:"1px solid #E8EAED", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                              {thumb
-                                ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
-                                : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                              }
-                            </div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                                <span style={{ fontSize:15, fontWeight:700, color:"#0F1117", letterSpacing:"-0.02em" }}>{p.name}</span>
-                                {dominantStatus && (
-                                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text, fontSize:11, fontWeight:600 }}>
-                                    <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />{dominantStatus}
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                                {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
-                                {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} to review</span></>}
-                                {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{latestVer?.approvalDate ? "Decided" : "Submitted"} {timeStr}</span></>}
-                              </div>
-                            </div>
-                            <div style={{ flexShrink:0 }}>
-                              <button onClick={e => { e.stopPropagation(); bGoProd(p.id); }}
-                                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", ...btnStyle }}>
-                                {btnLabel}
-                                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {curBProduct && (
-                    selectedMaterial ? (
-                      <MaterialDetail
-                        key={selectedMaterial.id}
-                        material={selectedMaterial}
-                        view={view}
-                        onClose={() => { setSelected(null); }}
-                        onApprove={handleApprove}
-                        onReject={handleReject}
-                        brandComment={brandComment}
-                        setBrandComment={setBrandComment}
-                        setMaterials={setMaterials}
-                        onSubmitNewVersion={handleNewVersion}
-                        showNewVersionFor={showNewVersionFor}
-                        setShowNewVersionFor={setShowNewVersionFor}
-                      />
-                    ) : (
-                      <div>
-                        <div style={{ display:"flex", gap:7, marginBottom:14 }}>
-                          <FilterBar />
-                        </div>
-                        <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
-                        {scopedMaterials.filter(m => m.materialName!=="__empty__").length === 0 && (
-                          <div style={{ padding:"48px 24px", textAlign:"center",
-                            background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
-                            <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:4 }}>
-                              No submissions for this product
-                            </div>
-                            <div style={{ color:"#9CA3AF", fontSize:13 }}>
-                              Waiting for the factory to submit
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  )}
-                </>
-            }
-          </>
-        )}
-        </>)}{/* end materials section */}
-
-      </div>
-
-
-
-        {/* ===== GARMENT SAMPLES SECTION ===== */}
-        {section === "samples" && (
-          <>
-            {gSelectedSample ? (
-              <div style={{ maxWidth:900 }}>
-                <GsDetail
-                  key={gSelectedSample.id}
-                  sample={gSelectedSample}
-                  view={view}
-                  onBack={() => { setGSelected(null); setGSearch(""); }}
-                  onDecide={handleGsDecide}
-                  onSubmitVersion={handleGsNewVersion}
-                />
-              </div>
-            ) : (
-              <>
-                {/* Header — matches materials layout exactly */}
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-                  <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:500 }}>
-                    {gSamples.length} sample{gSamples.length!==1?"s":""}
-                    {gSamples.filter(s=>s.status==="Awaiting Review").length > 0 &&
-                      ` · ${gSamples.filter(s=>s.status==="Awaiting Review").length} to review`}
-                  </span>
-                  {view === "factory" && (
-                    <button onClick={() => setShowNewGs(true)}
-                      style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-                        background:"#111827", color:"#fff", border:"none", borderRadius:7,
-                        fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                      {ICO.plus()} Submit sample
-                    </button>
                   )}
                 </div>
-
-                {/* Search */}
-                <SearchBar search={gSearch} setSearch={setGSearch}
-                  placeholder="Search samples, products, factories..." />
-
-                {/* Sample cards */}
-                {gLoading ? (
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                    padding:60, color:"#9CA3AF", gap:10 }}>
-                    <Spinner />
-                    <span style={{ fontSize:13 }}>Loading samples…</span>
-                  </div>
-                ) : gError ? (
-                  <div style={{ padding:"40px 24px", textAlign:"center",
-                    background:"#fff", borderRadius:12, border:"1px solid #E8EAED" }}>
-                    <div style={{ fontSize:13, color:"#EF4444", marginBottom:12 }}>
-                      Could not load garment samples
-                    </div>
-                    <button onClick={retryGarmentSamples}
-                      style={{ padding:"8px 20px", background:"#111827", color:"#fff",
-                        border:"none", borderRadius:7, fontSize:13, fontWeight:500,
-                        cursor:"pointer", fontFamily:"inherit" }}>
-                      Retry
-                    </button>
-                  </div>
-                ) : gSamples.length === 0 ? (
-                  <div style={{ padding:"64px 24px", textAlign:"center",
-                    background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
-                    <div style={{ width:48, height:48, borderRadius:12,
-                      background:"#F3F4F6", display:"flex", alignItems:"center",
-                      justifyContent:"center", margin:"0 auto 16px" }}>
-                      <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
-                        stroke="#9CA3AF" strokeWidth="1.6">
-                        <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/>
-                      </svg>
-                    </div>
-                    <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>
-                      No garment samples yet
-                    </div>
-                    <div style={{ color:"#9CA3AF", fontSize:13 }}>
-                      {view==="factory"
-                        ? "Submit your first sample to get started"
-                        : "Nothing to review right now"}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                    {gSamples
-                      .filter(s => {
-                        if (!gSearch.trim()) return true;
-                        const q = gSearch.toLowerCase();
-                        return s.productName.toLowerCase().includes(q)
-                          || (s.factory||"").toLowerCase().includes(q)
-                          || s.status.toLowerCase().includes(q);
-                      })
-                      .map(s => {
-                        const latest = s.versions[s.versions.length-1];
-                        const sc = GS_STATUS_COLORS[s.status] || GS_STATUS_COLORS["Awaiting Review"];
-                        const factoryLabel = view==="factory" && s.status==="New Sample Requested"
-                          ? "Requires Resubmission" : s.status;
-                        const fsc = view==="factory" && s.status==="New Sample Requested"
-                          ? { bg:"#FFF3E0", text:"#B45309", dot:"#F97316" } : sc;
-
-                        // Action button logic
-                        const btnLabel = view==="brand"
-                          ? (s.status==="Awaiting Review" ? "Review sample" : "Open")
-                          : (s.status==="New Sample Requested" ? "Resubmit" : "Open");
-                        const btnDark = (view==="brand" && s.status==="Awaiting Review")
-                          || (view==="factory" && s.status==="New Sample Requested");
-
-                        // Date display
-                        const actionDate = latest?.brandDecision?.date || latest?.dateReceived;
-                        const dAgo = relativeDate(actionDate);
-                        const dateLabel = latest?.brandDecision
-                          ? (latest.brandDecision.type==="Approved" ? "Approved" :
-                             latest.brandDecision.type==="New Sample Requested" ? "Requested" : "Reviewed")
-                          : "Submitted";
-
-                        // Thumb from first photo of latest version
-                        const thumb = latest?.photos?.[0]?.url || latest?.photos?.[0]?.dataUrl || null;
-
-                        return (
-                          <div key={s.id} className="prow"
-                            onClick={() => setGSelected(s.id)}
-                            style={{ background:"#fff", border:"1px solid #E8EAED",
-                              borderRadius:14, padding:"14px 18px",
-                              display:"flex", alignItems:"center", gap:16,
-                              boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
-
-                            {/* Thumbnail */}
-                            <div style={{ width:56, height:56, borderRadius:10,
-                              background:"#F3F4F6", flexShrink:0, overflow:"hidden",
-                              border:"1px solid #E8EAED", display:"flex",
-                              alignItems:"center", justifyContent:"center" }}>
-                              {thumb
-                                ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
-                                : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5">
-                                    <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/>
-                                  </svg>
-                              }
-                            </div>
-
-                            {/* Info */}
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ display:"flex", alignItems:"center",
-                                gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                                <span style={{ fontSize:15, fontWeight:700, color:"#0F1117",
-                                  letterSpacing:"-0.02em" }}>{s.productName}</span>
-                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
-                                  padding:"2px 8px", borderRadius:20, background:fsc.bg,
-                                  color:fsc.text, fontSize:11, fontWeight:600 }}>
-                                  <span style={{ width:5, height:5, borderRadius:"50%", background:fsc.dot }} />
-                                  {factoryLabel}
-                                </span>
-                              </div>
-                              <div style={{ fontSize:12.5, color:"#8B909A",
-                                display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
-                                <span style={{ fontFamily:"monospace", fontSize:11,
-                                  fontWeight:600, color:"#374151" }}>
-                                  {s.versions.length} version{s.versions.length!==1?"s":""}
-                                </span>
-                                {s.factory && <>
-                                  <span style={{ color:"#E5E7EB" }}>·</span>
-                                  <span>{s.factory}</span>
-                                </>}
-                                {dAgo && <>
-                                  <span style={{ color:"#E5E7EB" }}>·</span>
-                                  <span>{dateLabel} {dAgo}</span>
-                                </>}
-                              </div>
-                            </div>
-
-                            {/* Actions — matches materials layout */}
-                            <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                              <button onClick={e => { e.stopPropagation(); handleDeleteGarmentSample(s.id); }}
-                                style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6",
-                                  background:"transparent", cursor:"pointer", display:"flex",
-                                  alignItems:"center", justifyContent:"center", color:"#D1D5DB",
-                                  transition:"all 0.12s" }}
-                                onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
-                                onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
-                                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <polyline points="3 6 5 6 21 6"/>
-                                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                                  <path d="M10 11v6M14 11v6"/>
-                                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                                </svg>
-                              </button>
-                              <button onClick={() => setGSelected(s.id)}
-                                style={{ display:"flex", alignItems:"center", gap:6,
-                                  padding:"7px 14px", border:"none", borderRadius:8,
-                                  fontSize:12.5, fontWeight:600, cursor:"pointer",
-                                  fontFamily:"inherit",
-                                  background: btnDark ? "#0F1117" : "#F3F4F6",
-                                  color: btnDark ? "#fff" : "#374151" }}>
-                                {btnLabel}
-                                <svg width={11} height={11} viewBox="0 0 24 24" fill="none"
-                                  stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="9 18 15 12 9 6"/>
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    }
-                  </div>
-                )}
-              </>
-            )}
-          </>
+              );
+            })()}
+          </div>
         )}
 
-        </div>{/* end maxWidth */}
         </div>{/* end main content */}
 
       {showNew && (
         <NewSubmissionModal onClose={() => setShowNew(false)} onSubmit={addMaterial}
-          existingStyles={allStyles} existingMaterials={scopedMaterials} />
+          existingStyles={allStyles}
+          existingMaterials={activeProduct
+            ? materials.filter(m => activeProduct.materialIds.includes(m.id) && m.materialName !== "__empty__")
+            : materials.filter(m => m.materialName !== "__empty__")} />
       )}
 
       {showNewGs && (
         <GsNewSampleModal
           existingProductNames={products.map(p => p.name)}
+          defaultProductName={activeProduct?.name || ""}
           onClose={() => setShowNewGs(false)}
           onSubmit={async data => { await handleGsSubmit(data); setShowNewGs(false); }}
         />
@@ -2311,9 +2232,9 @@ function GsCommentList({ comments }) {
 }
 
 // ── New Garment Sample Modal (factory) ────────────────────────────────────────
-function GsNewSampleModal({ onClose, onSubmit, existingProductNames }) {
+function GsNewSampleModal({ onClose, onSubmit, existingProductNames, defaultProductName="" }) {
   const [step,        setStep]       = React.useState(1);
-  const [productName, setProductName]= React.useState("");
+  const [productName, setProductName]= React.useState(defaultProductName);
   const [factory,     setFactory]    = React.useState("");
   const [dateSent,    setDateSent]   = React.useState(new Date().toISOString().slice(0,10));
   const [notes,       setNotes]      = React.useState("");
