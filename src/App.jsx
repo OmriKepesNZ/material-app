@@ -1948,7 +1948,7 @@ This cannot be undone.`;
                     <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff",
                       borderRadius:12, border:"1px solid #E8EAED" }}>
                       <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:4 }}>No submissions yet</div>
-                      {view === "factory" && <div style={{ color:"#9CA3AF", fontSize:13 }}>Use "New Submission" to add the first one</div>}
+                      {view === "factory" && <div style={{ color:"#9CA3AF", fontSize:13 }}>Use &quot;New Submission&quot; to add the first one</div>}
                       {view === "brand"   && <div style={{ color:"#9CA3AF", fontSize:13 }}>Waiting for the factory to submit</div>}
                     </div>
                   ) : (
