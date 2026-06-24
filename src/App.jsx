@@ -2093,6 +2093,7 @@ This cannot be undone.`;
         )}
 
         </div>{/* end main content */}
+      </div>{/* end body */}
 
       {showNew && (
         <NewSubmissionModal onClose={() => setShowNew(false)} onSubmit={addMaterial}
