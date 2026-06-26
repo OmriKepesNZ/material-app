@@ -1707,7 +1707,6 @@ This cannot be undone.`;
         <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 100px", minWidth:0 }}>
 
         {/* ===== PAGE CONTENT ===== */}
-        <div>
 
         {/* ── HOME: no active tab — show all products ── */}
         {!activeTab && (
@@ -2092,8 +2091,8 @@ This cannot be undone.`;
           </div>
         )}
 
-        </div>{/* end main content */}
-      </div>{/* end body */}
+        </div>{/* end main scrollable */}
+      </div>{/* end body flex */}
 
       {showNew && (
         <NewSubmissionModal onClose={() => setShowNew(false)} onSubmit={addMaterial}
@@ -2112,28 +2111,7 @@ This cannot be undone.`;
         />
       )}
 
-      {/* ===== BOTTOM VIEW TOGGLE (hidden — toggle moved to navbar) ===== */}
-      <div style={{ display:"none" }}>
-        <div>
-          {[
-            { v:"factory", icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="2 20 2 10 8 6 8 10 14 6 14 10 20 6 22 6 22 20"/></svg>, label:"Factory" },
-            { v:"brand",   icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>, label:"Brand" },
-          ].map(({ v, icon, label }) => (
-            <button key={v}
-              onClick={() => { setView(v); setNav(null); setBNav(null); setSearch(""); }}
-              style={{
-                display:"flex", alignItems:"center", gap:6,
-                padding:"8px 18px", borderRadius:36, border:"none", cursor:"pointer",
-                fontFamily:"inherit", fontSize:12.5, fontWeight:600,
-                background: view===v ? "#fff" : "transparent",
-                color: view===v ? "#111827" : "rgba(255,255,255,0.45)",
-                transition:"all 0.15s cubic-bezier(0.34,1.56,0.64,1)",
-              }}>
-              {icon}{label}
-            </button>
-          ))}
-        </div>
-      </div>
+
 
 
     </div>
