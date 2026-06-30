@@ -1729,6 +1729,7 @@ This cannot be undone.`;
         </div>
 
         {/* ── Main scrollable content ── */}
+        <ErrorBoundary>
         <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 100px", minWidth:0 }}>
 
         {/* ===== PAGE CONTENT ===== */}
@@ -1894,7 +1895,6 @@ This cannot be undone.`;
 
         {/* ── PRODUCT TAB: active product open ── */}
         {activeTab && activeProduct && (
-          <ErrorBoundary>
           <div style={{ maxWidth:900 }}>
             {/* Product header */}
             <div style={{ marginBottom:20 }}>
@@ -2115,10 +2115,10 @@ This cannot be undone.`;
               );
             })()}
           </div>
-          </ErrorBoundary>
         )}
 
         </div>{/* end main scrollable */}
+        </ErrorBoundary>
       </div>{/* end body flex */}
 
       {showNew && (
