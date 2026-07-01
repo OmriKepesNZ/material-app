@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import "./App.css";
 import { loadAllData, createRecord, updateRecord, uploadImage, deleteProduct,
   loadGarmentSamples, createGarmentSample, createSampleVersion, reviewSampleVersion, uploadFile,
   deleteGarmentSample } from "./airtable";
