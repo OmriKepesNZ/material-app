@@ -1,406 +1,511 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import "./App.css";
-import {
-  loadAllData, createRecord, updateRecord, uploadImage, deleteProduct,
-  loadGarmentSamples, createGarmentSample, createSampleVersion,
-  reviewSampleVersion, uploadFile,
-} from "./airtable";
+import { loadAllData, createRecord, updateRecord, uploadImage, deleteProduct,
+  loadGarmentSamples, createGarmentSample, createSampleVersion, reviewSampleVersion, uploadFile,
+  deleteGarmentSample } from "./airtable";
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-// These come from Airtable option fields — keep in sync with your field settings.
-// If you rename an Airtable option, update it here too.
-const MATERIAL_TYPES  = ["Lab Dip", "Trim", "Fabric Swatch"];
+// --- Constants ----------------------------------------------------------------
+const MATERIAL_TYPES = ["Lab Dip", "Trim", "Fabric Swatch"];
 const COURIER_OPTIONS = ["DHL", "FedEx", "UPS", "Other"];
 
+// Format YYYY-MM-DD → "7 Apr 2026"
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" });
+}
+
+// Relative time: "Today", "Yesterday", "3d ago"
+function relativeDate(dateStr) {
+  if (!dateStr) return "";
+  const days = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days}d ago`;
+  return formatDate(dateStr);
+}
+const SEASONS = ["SS25", "FW25", "SS26", "FW26"];
+
 const STATUS_COLORS = {
-  Pending:  { bg:"#FFF8E6", text:"#92400E", dot:"#F59E0B" },
-  Approved: { bg:"#ECFDF5", text:"#065F46", dot:"#10B981" },
-  Rejected: { bg:"#FEF2F2", text:"#991B1B", dot:"#EF4444" },
+  Pending:  { bg: "#FFF8E6", text: "#92400E", dot: "#F59E0B" },
+  Approved: { bg: "#ECFDF5", text: "#065F46", dot: "#10B981" },
+  Rejected: { bg: "#FEF2F2", text: "#991B1B", dot: "#EF4444" },
 };
 const SHIP_COLORS = {
-  "At Factory": { bg:"#F3F4F6", text:"#374151", dot:"#9CA3AF" },
-  "In Transit": { bg:"#EFF6FF", text:"#1D4ED8", dot:"#3B82F6" },
-  "Delivered":  { bg:"#ECFDF5", text:"#065F46", dot:"#10B981" },
+  "At Factory": { bg: "#F3F4F6", text: "#374151", dot: "#9CA3AF" },
+  "In Transit":  { bg: "#EFF6FF", text: "#1D4ED8", dot: "#3B82F6" },
+  Delivered:     { bg: "#ECFDF5", text: "#065F46", dot: "#10B981" },
 };
+
+// Garment sample status colours (separate from material STATUS_COLORS)
 const GS_STATUS_COLORS = {
-  "Awaiting Review":        { bg:"#FFF8E6", text:"#92400E",  dot:"#F59E0B" },
-  "Approved":               { bg:"#ECFDF5", text:"#065F46",  dot:"#10B981" },
-  "Approved with Comments": { bg:"#EFF6FF", text:"#1E40AF",  dot:"#3B82F6" },
-  "New Sample Requested":   { bg:"#FFF3E0", text:"#B45309",  dot:"#F97316" },
-  "Requires Resubmission":  { bg:"#FFF3E0", text:"#B45309",  dot:"#F97316" },
-  "Rejected":               { bg:"#FEF2F2", text:"#991B1B",  dot:"#EF4444" },
+  "Awaiting Review":        { bg: "#FFF8E6", text: "#92400E",  dot: "#F59E0B" },
+  "Approved":               { bg: "#ECFDF5", text: "#065F46",  dot: "#10B981" },
+  "Approved with Comments": { bg: "#EFF6FF", text: "#1E40AF",  dot: "#3B82F6" },
+  "New Sample Requested":   { bg: "#FFF3E0", text: "#B45309",  dot: "#F97316" },
+  "Requires Resubmission":  { bg: "#FFF3E0", text: "#B45309",  dot: "#F97316" },
+  "Rejected":               { bg: "#FEF2F2", text: "#991B1B",  dot: "#EF4444" },
 };
 
-// ─── Shared style constants ──────────────────────────────────────────────────
-// inp is used across DetailModal, FilterBar, and GS modals
-const inp = {
-  width:"100%", padding:"8px 10px", border:"1.5px solid #E5E7EB",
-  borderRadius:7, fontSize:13, fontFamily:"inherit", color:"#111827",
-  background:"#fff", outline:"none", boxSizing:"border-box",
-};
-const lbl = {
-  fontSize:10, fontWeight:600, color:"#9CA3AF",
-  textTransform:"uppercase", letterSpacing:"0.07em",
-  display:"block", marginBottom:4,
-};
-
-// ─── Shared tiny components ──────────────────────────────────────────────────
+// --- Tiny helpers -------------------------------------------------------------
 function Badge({ status, type = "approval" }) {
-  const c = (type === "approval" ? STATUS_COLORS : SHIP_COLORS)[status]
-    || { bg:"#F3F4F6", text:"#374151", dot:"#9CA3AF" };
+  const c = (type === "approval" ? STATUS_COLORS : SHIP_COLORS)[status] || { bg: "#F3F4F6", text: "#374151", dot: "#9CA3AF" };
   return (
-    <span className="badge" style={{ background:c.bg, color:c.text }}>
-      <span style={{ width:5, height:5, borderRadius:"50%", background:c.dot }} />
-      {status}
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 20, background: c.bg, color: c.text, fontSize: 11.5, fontWeight: 500 }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: c.dot }} />{status}
     </span>
   );
 }
 
+function Divider() { return <div style={{ height: 1, background: "#F3F4F6", margin: "2px 0" }} />; }
+
+// --- Spinner ------------------------------------------------------------------
 function Spinner() {
   return (
-    <svg width={18} height={18} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.5" style={{ animation:"spin 0.8s linear infinite" }}>
-      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: "spin 0.8s linear infinite" }}>
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
     </svg>
   );
 }
 
-// Reusable SVG icons
-const ICO = {
-  close:   <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-  back:    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>,
-  chevron: <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>,
-  check:   <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
-  plus:    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
-  photo:   <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
-  file:    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
-  trash:   <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
-  factory: <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="2 20 2 10 8 6 8 10 14 6 14 10 20 6 22 6 22 20"/></svg>,
-  brand:   <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>,
-  garment: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg>,
-  material:<svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
-  search:  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
-};
+// --- Fake AI extraction -------------------------------------------------------
+// In production this calls a vision API. Here we simulate plausible results
+// and use existing materials context to infer version number.
+async function fakeExtractFromImage(imageDataUrl, styleName, materialType, existingMaterials) {
+  await new Promise(r => setTimeout(r, 1900));
 
-// ─── SearchBar ───────────────────────────────────────────────────────────────
-function SearchBar({ value, onChange, placeholder }) {
-  return (
-    <div className="search-wrap">
-      <span className="search-icon">{ICO.search}</span>
-      <input value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder} />
-      {value && (
-        <button onClick={() => onChange("")}
-          style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)",
-            background:"none", border:"none", cursor:"pointer", color:"#9CA3AF" }}>
-          {ICO.close}
-        </button>
-      )}
-    </div>
+  const nameMap = {
+    "Lab Dip":       ["Olive #3", "Slate Blue", "Warm Terracotta", "Charcoal Grey", "Dusty Sage"],
+    "Trim":          ["YKK Zipper Pull", "Main Woven Label", "Care Label", "Size Tab", "Metal Button"],
+    "Fabric Swatch": ["3L Shell Fabric", "Lining Fleece", "Rib Knit Cuff", "Woven Twill", "Mesh Backer"],
+  };
+  const names = nameMap[materialType] || ["Sample"];
+  const detectedName = names[Math.floor(Math.random() * names.length)];
+
+  // Per-type spec extraction simulation
+  const specMap = {
+    "Lab Dip": [
+      "Colorway: Olive Drab\nDye method: Reactive\nDelta E: 1.2 vs. target\nSubstrate: 100% Cotton poplin",
+      "Colorway: Slate Blue\nDye method: Vat\nDelta E: 0.8 vs. target\nSubstrate: 80% Nylon / 20% Elastane",
+      "Colorway: Warm Terracotta\nDye method: Pigment\nDelta E: 2.1 vs. target\nSubstrate: 100% Linen",
+    ],
+    "Trim": [
+      "Material: Zinc alloy, nickel-free\nFinish: Matte black PVD\nSize: #5 (5mm tape width)\nPuller length: 38mm",
+      "Weave: Damask\nThread count: 72 EPI\nSize: 55mm x 30mm\nContent: 100% Polyester",
+      "Print method: Heat transfer\nSize: 40mm x 18mm\nContent: 100% Satin polyester\nCompliance: REACH, OEKO-TEX",
+    ],
+    "Fabric Swatch": [
+      "Weight: 128 g/m2\nComposition: 75D 100% Nylon ripstop\nFinish: DWR (C0)\nRating: 10K/10K waterproof / breathable\nWidth: 150cm",
+      "Weight: 320 g/m2\nComposition: 94% Polyester / 6% Elastane\nConstruction: Double-faced fleece\nPilling resistance: 4.5 (Martindale)\nWidth: 160cm",
+      "Weight: 185 g/m2\nComposition: 87% Recycled Nylon / 13% Elastane\nConstruction: 4-way stretch woven\nColorfastness: 4-5 (ISO 105-C06)\nWidth: 148cm",
+    ],
+  };
+
+  const specOptions = specMap[materialType] || [];
+  const extractedSpecs = specOptions.length ? specOptions[Math.floor(Math.random() * specOptions.length)] : "";
+
+  // Check if this material already exists for this style -> infer version
+  const match = existingMaterials.find(
+    m => m.styleName === styleName && m.materialType === materialType &&
+         m.materialName.toLowerCase() === detectedName.toLowerCase()
   );
+  const version = match ? match.versions.length + 1 : 1;
+  const submissionDate = new Date().toISOString().slice(0, 10);
+
+  return { materialName: detectedName, version, submissionDate, extractedSpecs };
 }
 
-// ─── AddRow (inline product/item create) ─────────────────────────────────────
-function AddRow({ placeholder, onAdd, onCancel }) {
-  const [val, setVal] = useState("");
-  const ref = useRef();
-  useEffect(() => { ref.current?.focus(); }, []);
-  const submit = () => val.trim() ? onAdd(val.trim()) : onCancel();
-  return (
-    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px", borderTop:"1px solid #F3F4F6" }}>
-      <input ref={ref} value={val} onChange={e => setVal(e.target.value)}
-        onKeyDown={e => { if (e.key==="Enter") submit(); if (e.key==="Escape") onCancel(); }}
-        placeholder={placeholder}
-        style={{ flex:1, padding:"7px 10px", border:"1.5px solid #111827", borderRadius:7,
-          fontSize:13, fontFamily:"inherit", outline:"none", color:"#111827" }} />
-      <button onClick={submit} className="btn-primary" style={{ padding:"7px 14px" }}>Add</button>
-      <button onClick={onCancel} className="btn-outline" style={{ padding:"7px 10px" }}>Cancel</button>
-    </div>
-  );
-}
-
-// ─── Materials: New Submission Modal ─────────────────────────────────────────
-// UX goal: fast and frictionless for factory workers.
-// Single flowing screen — photo first, type clear, everything else secondary.
+// --- New Submission Modal -----------------------------------------------------
 function NewSubmissionModal({ onClose, onSubmit, existingStyles, existingMaterials }) {
+  const [step, setStep] = useState("form"); // form | uploading | review
+  const [styleName, setStyleName] = useState("");
+  const [customStyle, setCustomStyle] = useState("");
   const [materialType, setMaterialType] = useState("");
-  const [materialName, setMaterialName] = useState("");
-  const [notes,        setNotes]        = useState("");
-  const [specs,        setSpecs]        = useState("");
-  const [image,        setImage]        = useState(null);
-  const [courier,      setCourier]      = useState("DHL");
-  const [tracking,     setTracking]     = useState("");
-  const [showTracking, setShowTracking] = useState(false);
-  const [submitting,   setSubmitting]   = useState(false);
-  const [visible,      setVisible]      = useState(false);
-  const fileRef = useRef();
+  const [image, setImage] = useState(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState(null); // { materialName, version, submissionDate }
+  const [showMore, setShowMore] = useState(false);
+  const [courier, setCourier] = useState("DHL");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [notes, setNotes] = useState("");
+  const [visible, setVisible] = useState(false);
   const dropRef = useRef();
+  const fileRef = useRef();
+
+  const resolvedStyle = ""; // style is derived from nav context, not modal
 
   useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
-  const close = () => { setVisible(false); setTimeout(onClose, 200); };
 
-  function handleFile(file) {
-    if (!file || !file.type.startsWith("image/")) return;
-    const r = new FileReader();
-    r.onload = e => setImage(e.target.result);
-    r.readAsDataURL(file);
+  function handleClose() {
+    setVisible(false);
+    setTimeout(onClose, 200);
   }
 
-  async function handleSubmit() {
-    if (!materialType || !materialName.trim()) return;
-    setSubmitting(true);
-    const match = existingMaterials.find(m =>
-      m.materialType === materialType &&
-      m.materialName.toLowerCase() === materialName.trim().toLowerCase()
-    );
-    const version = match ? match.versions.length + 1 : 1;
-    await onSubmit({
+  async function handleImageSelected(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      setImage(e.target.result);
+      setExtracting(true);
+      setStep("review");
+      const result = await fakeExtractFromImage(e.target.result, resolvedStyle, materialType, existingMaterials);
+      setExtracted(result);
+      if (result.extractedSpecs) setNotes(result.extractedSpecs);
+      setExtracting(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) handleImageSelected(file);
+  }
+
+  function handleSubmit() {
+    onSubmit({
+      styleName:       resolvedStyle,
       materialType,
-      materialName: materialName.trim(),
-      factoryNotes: notes,
-      extractedSpecs: specs,
+      materialName:    extracted?.materialName || "Unnamed",
+      factoryNotes:    notes,
       image,
       courier,
-      trackingNumber: tracking,
-      shipmentStatus: tracking ? "In Transit" : "At Factory",
-      season: "",
-      factoryName: "",
-      detectedVersion: version,
+      trackingNumber,
+      shipmentStatus:  trackingNumber ? "In Transit" : "At Factory",
+      season:          "",
+      factoryName:     "",
+      detectedVersion: extracted?.version || 1,
+      extractedSpecs:  extracted?.extractedSpecs || "",
     });
-    close();
+    handleClose();
   }
 
-  const canSubmit = !!materialType && !!materialName.trim();
+  const canProceedToUpload = !!materialType;
+
+  const inp = { width: "100%", padding: "9px 12px", border: "1.5px solid #E5E7EB", borderRadius: 8, fontSize: 14, fontFamily: "inherit", color: "#111827", background: "#fff", outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
 
   return (
-    <div onClick={e => e.target===e.currentTarget && close()}
-      style={{ position:"fixed", inset:0, zIndex:200, display:"flex", alignItems:"center",
-        justifyContent:"center", padding:16,
+    <div
+      onClick={(e) => e.target === e.currentTarget && handleClose()}
+      style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
         background: visible ? "rgba(10,10,15,0.55)" : "rgba(10,10,15,0)",
-        backdropFilter: visible ? "blur(6px)" : "blur(0)",
-        transition:"background 0.22s, backdrop-filter 0.22s" }}>
+        backdropFilter: visible ? "blur(6px)" : "blur(0px)",
+        transition: "background 0.22s, backdrop-filter 0.22s" }}>
 
-      <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
-        onChange={e => handleFile(e.target.files[0])} />
+      {/* Single shared hidden file input for all steps */}
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleImageSelected(e.target.files[0])} />
 
       <div style={{
-        background:"#fff", borderRadius:20, width:"100%", maxWidth:460,
-        maxHeight:"92vh", overflowY:"auto",
-        boxShadow: visible ? "0 0 0 1px rgba(0,0,0,0.06),0 24px 64px rgba(0,0,0,0.18)" : "none",
+        background: "#fff", borderRadius: 20, width: "100%", maxWidth: 440, overflow: "hidden",
+        boxShadow: visible ? "0 0 0 1px rgba(0,0,0,0.06), 0 24px 64px rgba(0,0,0,0.18), 0 64px 120px rgba(0,0,0,0.1)" : "none",
         transform: visible ? "translateY(0) scale(1)" : "translateY(20px) scale(0.97)",
         opacity: visible ? 1 : 0,
-        transition:"transform 0.24s cubic-bezier(0.22,1,0.36,1),opacity 0.18s,box-shadow 0.24s",
+        transition: "transform 0.24s cubic-bezier(0.22,1,0.36,1), opacity 0.18s ease, box-shadow 0.24s",
       }}>
 
-        {/* ── Photo area — full width, tap anywhere to upload ── */}
-        <div
-          ref={dropRef}
-          onClick={() => fileRef.current.click()}
-          onDragOver={e => { e.preventDefault(); dropRef.current.style.background="#F0F0FF"; }}
-          onDragLeave={() => { dropRef.current.style.background = image ? "transparent" : "#F9FAFB"; }}
-          onDrop={e => { e.preventDefault(); dropRef.current.style.background="#F9FAFB"; handleFile(e.dataTransfer.files[0]); }}
-          style={{ position:"relative", cursor:"pointer",
-            background: image ? "transparent" : "#F9FAFB",
-            borderBottom:"1px solid #F3F4F6",
-            transition:"background 0.15s" }}>
-
-          {image ? (
-            <>
-              <img src={image} alt="" style={{ width:"100%", height:200, objectFit:"cover", display:"block" }} />
-              {/* Overlay with replace hint */}
-              <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0)",
-                display:"flex", alignItems:"flex-end", justifyContent:"flex-end",
-                padding:10, transition:"background 0.15s" }}
-                onMouseEnter={e => e.currentTarget.style.background="rgba(0,0,0,0.25)"}
-                onMouseLeave={e => e.currentTarget.style.background="rgba(0,0,0,0)"}>
-                <span style={{ background:"rgba(0,0,0,0.55)", color:"#fff", fontSize:11,
-                  fontWeight:500, padding:"4px 10px", borderRadius:6,
-                  backdropFilter:"blur(4px)", opacity:0, transition:"opacity 0.15s" }}
-                  className="replace-hint">
-                  Tap to replace
-                </span>
-              </div>
-            </>
-          ) : (
-            <div style={{ padding:"36px 24px", textAlign:"center" }}>
-              <div style={{ width:52, height:52, borderRadius:14, background:"#F3F4F6",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                margin:"0 auto 12px" }}>
-                <svg width={24} height={24} viewBox="0 0 24 24" fill="none"
-                  stroke="#9CA3AF" strokeWidth="1.6">
-                  <rect x="3" y="3" width="18" height="18" rx="3"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <polyline points="21 15 16 10 5 21"/>
-                </svg>
-              </div>
-              <div style={{ fontSize:15, fontWeight:600, color:"#111827", marginBottom:4 }}>
-                Add a photo
-              </div>
-              <div style={{ fontSize:13, color:"#9CA3AF" }}>
-                Tap here or drag and drop
-              </div>
-            </div>
-          )}
-
-          {/* Header overlaid on photo (or above if no photo) */}
-          <div style={{ position:"absolute", top:12, left:14, right:14,
-            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:13, fontWeight:600,
-              color: image ? "#fff" : "#111827",
-              textShadow: image ? "0 1px 4px rgba(0,0,0,0.4)" : "none" }}>
-              New Submission
-            </div>
-            <button onClick={e => { e.stopPropagation(); close(); }}
-              style={{ width:28, height:28, borderRadius:7,
-                border: image ? "none" : "1px solid #E5E7EB",
-                background: image ? "rgba(0,0,0,0.4)" : "#fff",
-                cursor:"pointer", display:"flex", alignItems:"center",
-                justifyContent:"center", backdropFilter: image ? "blur(4px)" : "none" }}>
-              <svg width={11} height={11} viewBox="0 0 24 24" fill="none"
-                stroke={image ? "#fff" : "#9CA3AF"} strokeWidth="2.5">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Form body ── */}
-        <div style={{ padding:"20px 20px 24px", display:"flex", flexDirection:"column", gap:16 }}>
-
-          {/* Material type — big clear buttons */}
+        {/* -- STEP 1: Pick material type ------------------------- */}
+        {step === "form" && (
           <div>
-            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-              letterSpacing:"0.07em", marginBottom:8 }}>What are you submitting?</p>
-            <div style={{ display:"flex", gap:7 }}>
-              {MATERIAL_TYPES.map(t => (
-                <button key={t} onClick={() => setMaterialType(t)}
-                  style={{ flex:1, padding:"11px 6px", borderRadius:9, border:"1.5px solid",
-                    cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:600,
-                    lineHeight:1.3, transition:"all 0.12s",
-                    borderColor: materialType===t ? "#111827" : "#E5E7EB",
-                    background:  materialType===t ? "#111827" : "#fff",
-                    color:       materialType===t ? "#fff"    : "#6B7280" }}>
-                  {t}
+            <div style={{ padding: "24px 24px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <div style={{ fontSize: 17, fontWeight: 650, letterSpacing: "-0.02em" }}>New Submission</div>
+                <button onClick={handleClose} style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid #E5E7EB", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Material name */}
-          <div>
-            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-              letterSpacing:"0.07em", marginBottom:6 }}>Name</p>
-            <input value={materialName} onChange={e => setMaterialName(e.target.value)}
-              placeholder="e.g. Olive Lab Dip, YKK #5 Zipper Pull…"
-              style={{ ...inp, fontSize:14, padding:"10px 12px" }} />
-          </div>
-
-          {/* Notes */}
-          <div>
-            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-              letterSpacing:"0.07em", marginBottom:6 }}>
-              Notes
-              <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0,
-                color:"#C4C9D4", marginLeft:5 }}>— optional</span>
-            </p>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              placeholder="What changed, anything to flag…"
-              style={{ ...inp, resize:"none", lineHeight:1.55 }} />
-          </div>
-
-          {/* Specs */}
-          <div>
-            <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-              letterSpacing:"0.07em", marginBottom:6 }}>
-              Specs
-              <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0,
-                color:"#C4C9D4", marginLeft:5 }}>— optional</span>
-            </p>
-            <textarea value={specs} onChange={e => setSpecs(e.target.value)} rows={3}
-              placeholder="Colour delta, composition, finish, weight, dimensions…"
-              style={{ ...inp, resize:"none", lineHeight:1.55 }} />
-          </div>
-
-          {/* Courier / tracking — collapsed by default */}
-          {!showTracking ? (
-            <button onClick={() => setShowTracking(true)}
-              style={{ background:"none", border:"none", cursor:"pointer", fontFamily:"inherit",
-                fontSize:13, color:"#9CA3AF", padding:0, textAlign:"left",
-                display:"flex", alignItems:"center", gap:5 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" strokeWidth="2">
-                <rect x="1" y="3" width="15" height="13" rx="1"/>
-                <path d="M16 8h4l3 3v5h-7V8z"/>
-                <circle cx="5.5" cy="18.5" r="2.5"/>
-                <circle cx="18.5" cy="18.5" r="2.5"/>
-              </svg>
-              Add courier & tracking number
-            </button>
-          ) : (
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-              <div>
-                <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-                  letterSpacing:"0.07em", marginBottom:6 }}>Courier</p>
-                <select value={courier} onChange={e => setCourier(e.target.value)}
-                  style={{ ...inp, appearance:"none" }}>
-                  {COURIER_OPTIONS.map(c => <option key={c}>{c}</option>)}
-                </select>
               </div>
-              <div>
-                <p style={{ fontSize:11, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-                  letterSpacing:"0.07em", marginBottom:6 }}>Tracking no.</p>
-                <input value={tracking} onChange={e => setTracking(e.target.value)}
-                  placeholder="Optional" style={inp} />
+
+              {/* Type selector only - style/product is already known from nav context */}
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Material Type</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {MATERIAL_TYPES.map(t => (
+                    <button key={t} onClick={() => setMaterialType(t)} style={{
+                      flex: 1, padding: "10px 4px", borderRadius: 8, border: "1.5px solid", cursor: "pointer",
+                      fontFamily: "inherit", fontSize: 12.5, fontWeight: 500, transition: "all 0.12s", lineHeight: 1.3,
+                      borderColor: materialType === t ? "#111827" : "#E5E7EB",
+                      background: materialType === t ? "#111827" : "#fff",
+                      color: materialType === t ? "#fff" : "#374151",
+                    }}>{t}</button>
+                  ))}
+                </div>
               </div>
             </div>
-          )}
 
-          {/* Submit */}
-          <button onClick={handleSubmit} disabled={!canSubmit || submitting}
-            style={{ width:"100%", padding:14, borderRadius:11, border:"none",
-              fontFamily:"inherit", fontSize:15, fontWeight:700, cursor: canSubmit ? "pointer" : "not-allowed",
-              letterSpacing:"-0.01em",
-              background: canSubmit ? "#111827" : "#F3F4F6",
-              color:      canSubmit ? "#fff"    : "#C4C9D4",
-              transition:"background 0.15s, color 0.15s",
-              display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-            {submitting ? <><Spinner /> Submitting…</> : "Submit"}
-          </button>
-        </div>
+            <div style={{ padding: "0 24px 24px" }}>
+              <button
+                onClick={() => setStep("uploading")}
+                disabled={!materialType}
+                style={{
+                  width: "100%", padding: "13px", borderRadius: 10, border: "none", cursor: materialType ? "pointer" : "not-allowed",
+                  fontFamily: "inherit", fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em",
+                  background: materialType ? "#111827" : "#F3F4F6",
+                  color: materialType ? "#fff" : "#9CA3AF",
+                  transition: "all 0.15s",
+                }}>
+                Continue {'->'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* -- STEP 2: Photo upload ------------------------------- */}
+        {step === "uploading" && (
+          <div>
+            <div style={{ padding: "24px 24px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <button onClick={() => setStep("form")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, color: "#9CA3AF", fontSize: 13, padding: 0, fontFamily: "inherit" }}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                  Back
+                </button>
+                <button onClick={handleClose} style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid #E5E7EB", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 17, fontWeight: 650, letterSpacing: "-0.02em", marginBottom: 4 }}>Upload Photo</div>
+                <div style={{ fontSize: 13, color: "#9CA3AF" }}>
+                  <span style={{ fontWeight: 500, color: "#374151" }}>{resolvedStyle}</span>
+                  {" . "}
+                  <span style={{ color: "#6B7280" }}>{materialType}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Drop zone */}
+            <div style={{ padding: "0 24px 24px" }}>
+              <div
+                ref={dropRef}
+                onClick={() => fileRef.current.click()}
+                onDragOver={e => { e.preventDefault(); dropRef.current.style.borderColor = "#6366F1"; dropRef.current.style.background = "#F5F3FF"; }}
+                onDragLeave={() => { dropRef.current.style.borderColor = "#E5E7EB"; dropRef.current.style.background = "#FAFAFA"; }}
+                onDrop={handleDrop}
+                style={{
+                  border: "2px dashed #E5E7EB", borderRadius: 14, background: "#FAFAFA",
+                  padding: "48px 24px", textAlign: "center", cursor: "pointer",
+                  transition: "all 0.15s",
+                }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+                  <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.8">
+                    <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 4 }}>Drop photo here</div>
+                <div style={{ fontSize: 13, color: "#9CA3AF" }}>or click to browse</div>
+              </div>
+
+              {/* Camera shortcut note */}
+              <div style={{ textAlign: "center", marginTop: 14, fontSize: 12, color: "#C4C9D4" }}>
+                Works with camera, gallery, or files
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* -- STEP 3: Review extracted info ---------------------- */}
+        {step === "review" && (
+          <div>
+            {/* Image header */}
+            <div style={{ position: "relative" }}>
+              {image && (
+                <img src={image} alt="Upload" style={{ width: "100%", height: 190, objectFit: "cover", display: "block" }} />
+              )}
+              {/* Loading shimmer overlay while extracting */}
+              {extracting && (
+                <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.45)", backdropFilter: "blur(2px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                  <Spinner style={{ color: "#fff" }} />
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: 500 }}>Reading photo...</span>
+                </div>
+              )}
+              {/* Top bar overlays */}
+              <div style={{ position: "absolute", top: 12, left: 12, right: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ background: "rgba(0,0,0,0.48)", backdropFilter: "blur(6px)", borderRadius: 8, padding: "4px 10px", fontSize: 12, color: "#fff", fontWeight: 500 }}>
+                  {resolvedStyle}{" . "}{materialType}
+                </div>
+                <button onClick={handleClose} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "rgba(0,0,0,0.48)", backdropFilter: "blur(6px)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              {/* Replace photo button */}
+              {!extracting && (
+                <button onClick={() => fileRef.current.click()} style={{ position: "absolute", bottom: 10, right: 10, background: "rgba(0,0,0,0.48)", backdropFilter: "blur(6px)", border: "none", borderRadius: 7, padding: "5px 10px", color: "#fff", fontSize: 11.5, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+                  Replace
+                </button>
+              )}
+            </div>
+
+            <div style={{ padding: "20px 22px 22px" }}>
+
+              {/* -- Extracted fields (read-only display) -- */}
+              <div style={{ marginBottom: 18 }}>
+                {/* Header row */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600, color: extracting ? "#C4C9D4" : "#10B981", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                    {extracting ? (
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#E5E7EB", display: "inline-block" }} />
+                    ) : (
+                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    )}
+                    {extracting ? "Extracting..." : "Auto-filled"}
+                  </div>
+                </div>
+
+                {/* Three extracted read-only chips */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, marginBottom: 14 }}>
+                  {/* Material Name - editable */}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "#C4C9D4", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Name</div>
+                    {extracting ? (
+                      <div style={{ height: 36, background: "#F3F4F6", borderRadius: 8, animation: "pulse 1.2s ease-in-out infinite" }} />
+                    ) : (
+                      <input
+                        value={extracted?.materialName || ""}
+                        onChange={e => setExtracted(x => ({ ...x, materialName: e.target.value }))}
+                        style={{ ...inp, fontSize: 13, fontWeight: 600, padding: "8px 10px" }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Version - read only */}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "#C4C9D4", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Version</div>
+                    {extracting ? (
+                      <div style={{ width: 52, height: 36, background: "#F3F4F6", borderRadius: 8, animation: "pulse 1.2s ease-in-out infinite" }} />
+                    ) : (
+                      <div style={{ height: 36, minWidth: 48, padding: "0 12px", background: "#F3F4F6", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#374151", fontFamily: "monospace", border: "1.5px solid #EBEBEB" }}>
+                        V{extracted?.version || 1}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Date - read only */}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "#C4C9D4", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>Date</div>
+                    {extracting ? (
+                      <div style={{ width: 84, height: 36, background: "#F3F4F6", borderRadius: 8, animation: "pulse 1.2s ease-in-out infinite" }} />
+                    ) : (
+                      <div style={{ height: 36, padding: "0 10px", background: "#F3F4F6", borderRadius: 8, display: "flex", alignItems: "center", fontSize: 12, fontWeight: 500, color: "#6B7280", whiteSpace: "nowrap", border: "1.5px solid #EBEBEB" }}>
+                        {extracted?.submissionDate || new Date().toISOString().slice(0,10)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Version context note - only if V2+ */}
+                {!extracting && extracted?.version > 1 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 12px", background: "#FFF8E6", borderRadius: 8, border: "1px solid #FDE68A", marginBottom: 14 }}>
+                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span style={{ fontSize: 12, color: "#92400E", fontWeight: 500 }}>
+                      Resubmission - previous version was rejected
+                    </span>
+                  </div>
+                )}
+
+                {/* Notes - pre-filled with extracted specs, editable */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "#C4C9D4", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 5, display: "flex", alignItems: "center", gap: 6 }}>
+                    Notes
+                    {!extracting && notes && (
+                      <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "#10B981", fontSize: 10 }}>extracted from photo</span>
+                    )}
+                    {!extracting && !notes && (
+                      <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "#D1D5DB" }}>- optional</span>
+                    )}
+                  </div>
+                  <textarea
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    rows={notes ? 6 : 2}
+                    placeholder="Anything the brand should know..."
+                    disabled={extracting}
+                    style={{ ...inp, resize: "vertical", fontSize: 13, lineHeight: 1.6, color: extracting ? "#C4C9D4" : "#111827", fontFamily: notes ? "monospace" : "inherit" }}
+                  />
+                </div>
+              </div>
+
+              {/* More info accordion */}
+              {!extracting && (
+                <div style={{ marginBottom: 16 }}>
+                  <button
+                    onClick={() => setShowMore(v => !v)}
+                    style={{ background: "none", border: "none", padding: "6px 0", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", fontSize: 12.5, color: "#9CA3AF", fontWeight: 500 }}>
+                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                      style={{ transform: showMore ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                    {showMore ? "Hide courier info" : "Add courier / tracking"}
+                  </button>
+
+                  {showMore && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8, padding: "12px 14px", background: "#FAFAFA", borderRadius: 10, border: "1px solid #F3F4F6" }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#C4C9D4", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Courier</div>
+                        <select value={courier} onChange={e => setCourier(e.target.value)}
+                          style={{ ...inp, fontSize: 13, appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center", paddingRight: 26 }}>
+                          {COURIER_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#C4C9D4", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Tracking No.</div>
+                        <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} placeholder="Optional" style={{ ...inp, fontSize: 13 }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                onClick={handleSubmit}
+                disabled={extracting}
+                style={{
+                  width: "100%", padding: "13px", borderRadius: 10, border: "none",
+                  cursor: extracting ? "not-allowed" : "pointer",
+                  fontFamily: "inherit", fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em",
+                  background: extracting ? "#F3F4F6" : "#111827",
+                  color: extracting ? "#C4C9D4" : "#fff",
+                  transition: "all 0.15s",
+                }}>
+                {extracting ? "Reading photo..." : "Submit for Approval"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// ─── Material Detail — full-page view (replaces popup modal) ─────────────────
+function MaterialDetail({ material, view, onClose, onApprove, onReject,
+  brandComment, setBrandComment, setMaterials, onSubmitNewVersion,
+  showNewVersionFor, setShowNewVersionFor }) {
 
-// --- Detail Modal --------------------------------------------------------------
-function DetailModal({ material, view, onClose, onApprove, onReject, brandComment, setBrandComment, setMaterials, onSubmitNewVersion, showNewVersionFor, setShowNewVersionFor }) {
-  const [visible, setVisible] = useState(false);
-  const [editShipment, setEditShipment] = useState(false);
-  const [newVer, setNewVer] = useState({ factoryNotes: "", courier: "DHL", trackingNumber: "", image: null });
+  // Local style constant — MaterialDetail lives outside App() so can't use App's inp
+  const inp = { width:"100%", padding:"8px 10px", border:"1.5px solid #E5E7EB",
+    borderRadius:7, fontSize:13, fontFamily:"inherit", color:"#111827",
+    background:"#fff", outline:"none", boxSizing:"border-box" };
+
   const [activeVersionIdx, setActiveVersionIdx] = useState(material.versions.length - 1);
+  const [editShipment,     setEditShipment]     = useState(false);
+  const [newVer,           setNewVer]           = useState({ factoryNotes:"", courier:"DHL", trackingNumber:"", image:null });
   const vFileRef = useRef();
 
-  const latest = material.versions[material.versions.length - 1];
-  const v = material.versions[activeVersionIdx]; // currently viewed version
-  const isLatest = activeVersionIdx === material.versions.length - 1;
-
-  useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
-
-  function close() { setVisible(false); setTimeout(onClose, 200); }
-
-  // Guard: if no versions exist, show a simple empty state
-  if (!v || !latest) return (
-    <div onClick={close}
-      style={{ position:"fixed", inset:0, zIndex:200, display:"flex", alignItems:"center",
-        justifyContent:"center", background:"rgba(10,10,15,0.5)", backdropFilter:"blur(5px)" }}>
-      <div style={{ background:"#fff", borderRadius:16, padding:"32px 40px", textAlign:"center" }}>
-        <div style={{ fontSize:15, fontWeight:600, marginBottom:8 }}>No submissions yet</div>
-        <div style={{ fontSize:13, color:"#9CA3AF", marginBottom:20 }}>This material has no versions recorded.</div>
-        <button onClick={close} className="btn-primary">Close</button>
-      </div>
+  if (!material.versions.length) return (
+    <div style={{ textAlign:"center", padding:60, color:"#9CA3AF" }}>
+      No submissions yet.
+      <button onClick={onClose} style={{ display:"block", margin:"16px auto 0", background:"none",
+        border:"none", color:"#6B7280", cursor:"pointer", fontFamily:"inherit", fontSize:13 }}>
+        {ICO.back()} Back
+      </button>
     </div>
   );
+
+  const latest   = material.versions[material.versions.length - 1];
+  const v        = material.versions[activeVersionIdx];
+  const isLatest = activeVersionIdx === material.versions.length - 1;
+  if (!v) return null;
 
   function handleVersionImg(file) {
     if (!file) return;
@@ -409,171 +514,283 @@ function DetailModal({ material, view, onClose, onApprove, onReject, brandCommen
     r.readAsDataURL(file);
   }
 
-  const card = { padding:"12px 14px", background:"#FAFAFA", borderRadius:8, border:"1px solid #F3F4F6" };
+  const card = { padding:"14px 16px", background:"#fff", borderRadius:10, border:"1px solid #EFEFEF", marginBottom:12 };
 
   return (
-    <div onClick={e => e.target === e.currentTarget && close()}
-      style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-        background: visible ? "rgba(10,10,15,0.5)" : "rgba(10,10,15,0)",
-        backdropFilter: visible ? "blur(5px)" : "blur(0)",
-        transition: "background 0.2s, backdrop-filter 0.2s" }}>
-      <div style={{
-        background: "#fff", borderRadius: 16, width: "100%", maxWidth: 900, maxHeight: "92vh", overflowY: "auto",
-        boxShadow: visible ? "0 0 0 1px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.1), 0 32px 72px rgba(0,0,0,0.2)" : "none",
-        transform: visible ? "translateY(0) scale(1)" : "translateY(24px) scale(0.96)",
-        opacity: visible ? 1 : 0,
-        transition: "transform 0.24s cubic-bezier(0.22,1,0.36,1), opacity 0.18s, box-shadow 0.24s",
-        transformOrigin: "center bottom",
-      }}>
-        {/* Header */}
-        <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid #F3F4F6", display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 2, borderRadius: "16px 16px 0 0" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 17, fontWeight: 650, letterSpacing: "-0.02em" }}>{material.materialName}</span>
-              <span style={{ padding: "1px 7px", background: isLatest ? "#111827" : "#F3F4F6", borderRadius: 4, fontSize: 11, fontWeight: 700, color: isLatest ? "#fff" : "#374151", fontFamily: "monospace" }}>V{v.version}</span>
-              <Badge status={v.status} />
-              <Badge status={v.shipmentStatus} type="shipment" />
-              {!isLatest && <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>- historical view</span>}
-            </div>
-            <div style={{ fontSize: 12, color: "#9CA3AF" }}>
-              {material.styleName}<span style={{ margin: "0 4px", color: "#E5E7EB" }}>{" . "}</span>
-              <span style={{ color: "#6B7280" }}>{material.materialType}</span>
-              {material.season && <><span style={{ margin: "0 4px", color: "#E5E7EB" }}>{" . "}</span>{material.season}</>}
-              <span style={{ margin: "0 4px", color: "#E5E7EB" }}>{" . "}</span>{material.factoryName}
-            </div>
-          </div>
-          <button onClick={close} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E5E7EB", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: 16 }}
-            onMouseEnter={e => e.currentTarget.style.background = "#F9FAFB"}
-            onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
-            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <div>
+      {/* Breadcrumb header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <button onClick={onClose}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
+              display:"flex", alignItems:"center", gap:4, fontSize:13, fontFamily:"inherit", padding:0 }}>
+            {ICO.back()} Back
           </button>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <span style={{ fontSize:13, color:"#6B7280" }}>{material.styleName}</span>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{material.materialName}</span>
         </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ padding:"2px 8px", background:isLatest?"#111827":"#F3F4F6",
+            borderRadius:4, fontSize:11, fontWeight:700,
+            color:isLatest?"#fff":"#374151", fontFamily:"monospace" }}>V{v.version}</span>
+          <Badge status={v.status} />
+          <Badge status={v.shipmentStatus} type="shipment" />
+          {!isLatest && <span style={{ fontSize:11, color:"#9CA3AF", fontStyle:"italic" }}>historical view</span>}
+        </div>
+      </div>
 
-        {/* Body */}
-        <div style={{ padding: "18px 22px 22px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          {/* Left */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {v.image
-              ? <img src={v.image} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", borderRadius: 10, border: "1px solid #E5E7EB" }} alt="" />
-              : <div style={{ width: "100%", aspectRatio: "4/3", border: "1.5px dashed #E5E7EB", borderRadius: 10, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#FAFAFA", gap: 8 }}>
-                  <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  <span style={{ fontSize: 11, color: "#D1D5DB" }}>No image</span>
-                </div>
-            }
-            <div style={{ ...card, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div><div style={lbl}>Factory</div><div style={{ fontSize: 13, fontWeight: 500 }}>{material.factoryName}</div></div>
-              <div><div style={lbl}>Submitted</div><div style={{ fontSize: 13, fontWeight: 500 }}>{v.submissionDate}</div></div>
-            </div>
-            {/* Shipment - only editable on latest */}
-            <div style={card}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={lbl}>Shipment</div>
-                {view === "factory" && !editShipment && isLatest && <button style={{ background: "none", border: "none", fontSize: 12, color: "#6B7280", cursor: "pointer", fontFamily: "inherit", padding: 0 }} onClick={() => setEditShipment(true)}>Edit</button>}
+      {/* Two-column body */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, alignItems:"start" }}>
+
+        {/* LEFT */}
+        <div>
+          {v.image
+            ? <img src={v.image} alt="" style={{ width:"100%", aspectRatio:"4/3", objectFit:"cover",
+                borderRadius:12, border:"1px solid #E5E7EB", marginBottom:14, display:"block" }} />
+            : <div style={{ width:"100%", aspectRatio:"4/3", border:"1.5px dashed #E5E7EB",
+                borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center",
+                justifyContent:"center", background:"#FAFAFA", gap:8, marginBottom:14 }}>
+                <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span style={{ fontSize:12, color:"#C4C9D4", fontWeight:500 }}>No photo uploaded</span>
               </div>
-              {!editShipment ? (
-                <div style={{ fontSize: 12.5, color: "#374151" }}>
-                  {v.courier && <span style={{ fontWeight: 600 }}>{v.courier}</span>}
-                  {v.trackingNumber
-                    ? <span style={{ fontFamily: "monospace", color: "#6366F1", marginLeft: 8, fontSize: 11.5 }}>{v.trackingNumber}</span>
-                    : <span style={{ color: "#C4C9D4", marginLeft: 6 }}>No tracking number</span>}
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <select value={latest.courier} onChange={e => setMaterials(p => p.map(m => m.id !== material.id ? m : { ...m, versions: m.versions.map((vv,i) => i===m.versions.length-1 ? {...vv, courier:e.target.value} : vv) }))} style={inp}>{COURIER_OPTIONS.map(c => <option key={c}>{c}</option>)}</select>
-                  <input value={latest.trackingNumber} onChange={e => setMaterials(p => p.map(m => m.id !== material.id ? m : { ...m, versions: m.versions.map((vv,i) => i===m.versions.length-1 ? {...vv, trackingNumber:e.target.value} : vv) }))} placeholder="Tracking number" style={inp} />
-                  <select value={latest.shipmentStatus} onChange={e => setMaterials(p => p.map(m => m.id !== material.id ? m : { ...m, versions: m.versions.map((vv,i) => i===m.versions.length-1 ? {...vv, shipmentStatus:e.target.value} : vv) }))} style={inp}>{["At Factory","In Transit","Delivered"].map(s => <option key={s}>{s}</option>)}</select>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button style={{ flex:1, padding:"7px 0", background:"#111827", color:"#fff", border:"none", borderRadius:6, fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }} onClick={() => setEditShipment(false)}>Save</button>
-                    <button style={{ flex:1, padding:"7px 0", background:"transparent", color:"#6B7280", border:"1px solid #E5E7EB", borderRadius:6, fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }} onClick={() => setEditShipment(false)}>Cancel</button>
-                  </div>
-                </div>
+          }
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
+            {[["Factory",material.factoryName||"—"],["Submitted",formatDate(v.submissionDate)],["Type",material.materialType||"—"]].map(([k,val])=>(
+              <div key={k} style={{ background:"#F9FAFB", borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase",
+                  letterSpacing:"0.06em", marginBottom:3 }}>{k}</div>
+                <div style={{ fontSize:13, fontWeight:500, color:"#111827" }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={card}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+              <div style={{ fontSize:11, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase", letterSpacing:"0.06em" }}>Shipment</div>
+              {view==="factory" && isLatest && !editShipment && (
+                <button onClick={()=>setEditShipment(true)} style={{ background:"none", border:"none",
+                  fontSize:12, color:"#6B7280", cursor:"pointer", fontFamily:"inherit", padding:0 }}>Edit</button>
               )}
             </div>
-          </div>
-
-          {/* Right */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {v.factoryNotes && (
-              <div style={card}><div style={lbl}>Factory Notes</div><div style={{ fontSize: 13, color: "#374151", lineHeight: 1.65 }}>{v.factoryNotes}</div></div>
-            )}
-            {v.brandComment && (
-              <div style={{ ...card, background: v.status==="Approved" ? "#F0FDF4" : v.status==="Rejected" ? "#FEF2F2" : "#FAFAFA", border: `1px solid ${v.status==="Approved"?"#D1FAE5":v.status==="Rejected"?"#FEE2E2":"#F3F4F6"}` }}>
-                <div style={{ ...lbl, color: v.status==="Approved"?"#065F46":v.status==="Rejected"?"#991B1B":"#9CA3AF" }}>Brand Feedback</div>
-                <div style={{ fontSize: 13, lineHeight: 1.65, color: v.status==="Approved"?"#065F46":v.status==="Rejected"?"#7F1D1D":"#374151" }}>{v.brandComment}</div>
+            {!editShipment ? (
+              <div style={{ fontSize:13, color:"#374151" }}>
+                {v.courier && <span style={{ fontWeight:600 }}>{v.courier}</span>}
+                {v.trackingNumber
+                  ? <span style={{ fontFamily:"monospace", color:"#6366F1", marginLeft:8, fontSize:12 }}>{v.trackingNumber}</span>
+                  : <span style={{ color:"#C4C9D4", marginLeft:6 }}>No tracking</span>}
               </div>
-            )}
-
-            {/* Brand actions only on latest */}
-            {view === "brand" && isLatest && latest.status === "Pending" && (
-              <div style={card}>
-                <div style={lbl}>Review Decision</div>
-                <textarea value={brandComment} onChange={e => setBrandComment(e.target.value)} placeholder="Add comment (optional)..." style={{ ...inp, resize:"none", height:64, fontSize:12.5, lineHeight:1.5, marginBottom:10 }} />
-                <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={onApprove} style={{ flex:1, padding:"9px", background:"#10B981", color:"#fff", border:"none", borderRadius:7, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Approve</button>
-                  <button onClick={onReject}  style={{ flex:1, padding:"9px", background:"#fff", color:"#EF4444", border:"1.5px solid #EF4444", borderRadius:7, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Reject</button>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                <select value={latest.courier} style={inp}
+                  onChange={e=>setMaterials(p=>p.map(m=>m.id!==material.id?m:{...m,versions:m.versions.map((vv,i)=>i===m.versions.length-1?{...vv,courier:e.target.value}:vv)}))}>
+                  {COURIER_OPTIONS.map(c=><option key={c}>{c}</option>)}
+                </select>
+                <input value={latest.trackingNumber} placeholder="Tracking number" style={inp}
+                  onChange={e=>setMaterials(p=>p.map(m=>m.id!==material.id?m:{...m,versions:m.versions.map((vv,i)=>i===m.versions.length-1?{...vv,trackingNumber:e.target.value}:vv)}))} />
+                <select value={latest.shipmentStatus} style={inp}
+                  onChange={e=>setMaterials(p=>p.map(m=>m.id!==material.id?m:{...m,versions:m.versions.map((vv,i)=>i===m.versions.length-1?{...vv,shipmentStatus:e.target.value}:vv)}))}
+                  >{["At Factory","In Transit","Delivered"].map(s=><option key={s}>{s}</option>)}</select>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={()=>setEditShipment(false)} style={{ flex:1,padding:"7px",background:"#111827",color:"#fff",border:"none",borderRadius:6,fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit" }}>Save</button>
+                  <button onClick={()=>setEditShipment(false)} style={{ flex:1,padding:"7px",background:"transparent",color:"#6B7280",border:"1px solid #E5E7EB",borderRadius:6,fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
                 </div>
               </div>
             )}
-            {view === "factory" && isLatest && latest.status === "Rejected" && !showNewVersionFor && (
-              <button onClick={() => setShowNewVersionFor(material.id)} style={{ padding:"11px", background:"#111827", color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                + Submit V{latest.version+1}
-              </button>
-            )}
-            {view === "factory" && showNewVersionFor === material.id && (
-              <div style={card}>
-                <div style={{ fontSize:12, fontWeight:600, color:"#374151", marginBottom:10 }}>New Submission - V{latest.version+1}</div>
-                <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
-                  <div>
-                    <div style={lbl}>Factory Notes *</div>
-                    <textarea required value={newVer.factoryNotes} onChange={e => setNewVer(f=>({...f,factoryNotes:e.target.value}))} placeholder="What changed?" style={{ ...inp, resize:"none", height:60 }} />
-                  </div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                    <div><div style={lbl}>Courier</div><select value={newVer.courier} onChange={e=>setNewVer(f=>({...f,courier:e.target.value}))} style={inp}>{COURIER_OPTIONS.map(c=><option key={c}>{c}</option>)}</select></div>
-                    <div><div style={lbl}>Tracking</div><input value={newVer.trackingNumber} onChange={e=>setNewVer(f=>({...f,trackingNumber:e.target.value}))} placeholder="Optional" style={inp}/></div>
-                  </div>
-                  <div>
-                    <div style={lbl}>Image</div>
-                    <input ref={vFileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={e=>handleVersionImg(e.target.files[0])} />
-                    <div onClick={()=>vFileRef.current.click()} style={{ border:"1.5px dashed #E5E7EB", borderRadius:7, padding:12, textAlign:"center", cursor:"pointer", background:"#fff" }}>
-                      {newVer.image ? <img src={newVer.image} style={{ maxHeight:80, borderRadius:5 }} alt="" /> : <span style={{ color:"#9CA3AF", fontSize:12 }}>Upload photo</span>}
+          </div>
+
+          {material.versions.length > 1 && (
+            <div style={card}>
+              <div style={{ fontSize:11,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10 }}>Version history</div>
+              {[...material.versions].reverse().map((ver,ri)=>{
+                const idx=material.versions.length-1-ri;
+                const isAct=idx===activeVersionIdx;
+                return (
+                  <div key={ver.version} onClick={()=>{setActiveVersionIdx(idx);setEditShipment(false);}}
+                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                      padding:"9px 12px", borderRadius:8, cursor:"pointer", marginBottom:2,
+                      background: isAct ? "#111827" : "#F9FAFB",
+                      border: isAct ? "1px solid #111827" : "1px solid #F3F4F6",
+                      transition:"all 0.1s" }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                      <span style={{ fontSize:12,fontWeight:isAct?700:500,color:isAct?"#fff":"#374151",fontFamily:"monospace" }}>V{ver.version}</span>
+                      <span style={{ fontSize:12,color:isAct?"rgba(255,255,255,0.6)":"#9CA3AF" }}>{ver.submissionDate}</span>
                     </div>
+                    <Badge status={ver.status} />
                   </div>
-                  <div style={{ display:"flex", gap:6 }}>
-                    <button onClick={() => { if (!newVer.factoryNotes.trim()) return; onSubmitNewVersion(material.id, newVer); setNewVer({factoryNotes:"",courier:"DHL",trackingNumber:"",image:null}); }}
-                      style={{ flex:1, padding:"8px", background:"#111827", color:"#fff", border:"none", borderRadius:6, fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>Submit</button>
-                    <button onClick={()=>setShowNewVersionFor(null)} style={{ flex:1, padding:"8px", background:"transparent", color:"#6B7280", border:"1px solid #E5E7EB", borderRadius:6, fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>Cancel</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Version history - simple rows, click to switch main panel */}
-            {material.versions.length > 1 && (
-              <div>
-                <div style={lbl}>Version History</div>
-                <div style={{ display:"flex", flexDirection:"column", gap: 3 }}>
-                  {[...material.versions].reverse().map((ver, ri) => {
-                    const idx = material.versions.length - 1 - ri;
-                    const isActive = activeVersionIdx === idx;
-                    return (
-                      <div key={ver.version}
-                        onClick={() => { setActiveVersionIdx(idx); setEditShipment(false); }}
-                        style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding: "8px 10px", borderRadius: 7, cursor: "pointer", transition: "background 0.08s", background: isActive ? "#F3F4F6" : "transparent" }}
-                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "#FAFAFA"; }}
-                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isActive ? "#F3F4F6" : "transparent"; }}>
-                        <div style={{ display:"flex", alignItems:"center", gap: 8 }}>
-                          <span style={{ fontSize: 12, fontWeight: isActive ? 700 : 500, color: isActive ? "#111827" : "#6B7280", fontFamily: "monospace" }}>V{ver.version}</span>
-                          <span style={{ fontSize: 12, color: "#9CA3AF" }}>{ver.submissionDate}</span>
-                        </div>
-                        <Badge status={ver.status} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
+
+        {/* RIGHT */}
+        <div>
+          {v.factoryNotes && (
+            <div style={card}>
+              <div style={{ fontSize:11,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6 }}>Factory notes</div>
+              <div style={{ fontSize:13,color:"#374151",lineHeight:1.7 }}>{v.factoryNotes}</div>
+            </div>
+          )}
+          {v.extractedSpecs && (
+            <div style={card}>
+              <div style={{ fontSize:11,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6 }}>Specs</div>
+              <pre style={{ fontSize:12,color:"#374151",lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"inherit",margin:0 }}>{v.extractedSpecs}</pre>
+            </div>
+          )}
+          {v.brandComment && (
+            <div style={{ ...card,
+              background:v.status==="Approved"?"#F0FDF4":v.status==="Rejected"?"#FEF2F2":"#FAFAFA",
+              border:`1px solid ${v.status==="Approved"?"#D1FAE5":v.status==="Rejected"?"#FEE2E2":"#F3F4F6"}` }}>
+              <div style={{ fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6,
+                color:v.status==="Approved"?"#065F46":v.status==="Rejected"?"#991B1B":"#9CA3AF" }}>Brand feedback</div>
+              <div style={{ fontSize:13,lineHeight:1.7,color:v.status==="Approved"?"#065F46":v.status==="Rejected"?"#7F1D1D":"#374151" }}>{v.brandComment}</div>
+            </div>
+          )}
+          {view==="brand" && isLatest && latest.status==="Pending" && (
+            <div style={card}>
+              <div style={{ fontSize:11,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8 }}>Review decision</div>
+              <textarea value={brandComment} onChange={e=>setBrandComment(e.target.value)}
+                placeholder="Add comment (optional)..." rows={3}
+                style={{ ...inp,resize:"none",lineHeight:1.55,marginBottom:10 }} />
+              <div style={{ display:"flex",gap:8 }}>
+                <button onClick={onApprove} style={{ flex:1,padding:"10px",background:"#10B981",color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit" }}>Approve</button>
+                <button onClick={onReject}  style={{ flex:1,padding:"10px",background:"#fff",color:"#EF4444",border:"1.5px solid #EF4444",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit" }}>Reject</button>
+              </div>
+            </div>
+          )}
+          {view==="factory" && isLatest && latest.status==="Rejected" && !showNewVersionFor && (
+            <button onClick={()=>setShowNewVersionFor(material.id)}
+              style={{ width:"100%",padding:12,background:"#111827",color:"#fff",border:"none",
+                borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:12 }}>
+              + Submit V{latest.version+1}
+            </button>
+          )}
+          {view==="factory" && showNewVersionFor===material.id && (
+            <div style={card}>
+              <div style={{ fontSize:13,fontWeight:600,color:"#374151",marginBottom:12 }}>New Submission — V{latest.version+1}</div>
+              <input ref={vFileRef} type="file" accept="image/*" style={{ display:"none" }}
+                onChange={e=>handleVersionImg(e.target.files[0])} />
+              <div style={{ display:"flex",flexDirection:"column",gap:9 }}>
+                <div>
+                  <div style={{ fontSize:10,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Factory notes *</div>
+                  <textarea value={newVer.factoryNotes} rows={3}
+                    onChange={e=>setNewVer(f=>({...f,factoryNotes:e.target.value}))}
+                    placeholder="What changed?" style={{ ...inp,resize:"none",lineHeight:1.55 }} />
+                </div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                  <div>
+                    <div style={{ fontSize:10,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Courier</div>
+                    <select value={newVer.courier} onChange={e=>setNewVer(f=>({...f,courier:e.target.value}))} style={inp}>
+                      {COURIER_OPTIONS.map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:10,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Tracking</div>
+                    <input value={newVer.trackingNumber} onChange={e=>setNewVer(f=>({...f,trackingNumber:e.target.value}))} placeholder="Optional" style={inp} />
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4 }}>Photo</div>
+                  <div onClick={()=>vFileRef.current.click()} style={{ border:"1.5px dashed #E5E7EB",borderRadius:8,padding:"12px",textAlign:"center",cursor:"pointer",background:"#FAFAFA" }}>
+                    {newVer.image?<img src={newVer.image} style={{ maxHeight:80,borderRadius:5 }} alt="" />:<span style={{ color:"#9CA3AF",fontSize:12 }}>Upload photo</span>}
+                  </div>
+                </div>
+                <div style={{ display:"flex",gap:6 }}>
+                  <button onClick={()=>{if(!newVer.factoryNotes.trim())return;onSubmitNewVersion(material.id,newVer);setNewVer({factoryNotes:"",courier:"DHL",trackingNumber:"",image:null});}}
+                    style={{ flex:1,padding:"9px",background:"#111827",color:"#fff",border:"none",borderRadius:7,fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit" }}>Submit</button>
+                  <button onClick={()=>setShowNewVersionFor(null)}
+                    style={{ flex:1,padding:"9px",background:"transparent",color:"#6B7280",border:"1px solid #E5E7EB",borderRadius:7,fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// --- Inline add row -----------------------------------------------------------
+function AddRow({ placeholder, onAdd, onCancel }) {
+  const [val, setVal] = useState("");
+  const ref = useRef();
+  useEffect(() => { ref.current && ref.current.focus(); }, []);
+  function submit() { if (val.trim()) onAdd(val.trim()); else onCancel(); }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderTop: "1px solid #F3F4F6" }}>
+      <input ref={ref} value={val} onChange={e => setVal(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
+        placeholder={placeholder}
+        style={{ flex: 1, padding: "7px 10px", border: "1.5px solid #111827", borderRadius: 7, fontSize: 13, fontFamily: "inherit", outline: "none", color: "#111827" }} />
+      <button onClick={submit} style={{ padding: "7px 14px", background: "#111827", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Add</button>
+      <button onClick={onCancel} style={{ padding: "7px 10px", background: "transparent", color: "#9CA3AF", border: "1px solid #E5E7EB", borderRadius: 7, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+    </div>
+  );
+}
+
+// --- Main App -----------------------------------------------------------------
+// ─── Icon helpers (functions so JSX compiles correctly at module level) ───────
+const ICO = {
+  close:   () => <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  back:    () => <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>,
+  chevron: () => <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>,
+  plus:    () => <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  search:  () => <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+};
+
+
+
+// ── ErrorBoundary — catches render errors, shows message instead of blank screen ──
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(err) { return { error: err }; }
+  componentDidCatch(err, info) { console.error("Render error:", err, info); }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding:40, fontFamily:"monospace", fontSize:13, color:"#EF4444",
+        background:"#FEF2F2", borderRadius:12, margin:20, whiteSpace:"pre-wrap" }}>
+        <strong>Render Error</strong>
+        <br/><br/>
+        {this.state.error.message}
+        <br/><br/>
+        <button onClick={() => this.setState({ error:null })}
+          style={{ padding:"6px 14px", background:"#111827", color:"#fff",
+            border:"none", borderRadius:6, cursor:"pointer", fontFamily:"inherit" }}>
+          Retry
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+
+function SearchBar({ search, setSearch, placeholder }) {
+  return (
+    <div style={{ position:"relative", marginBottom:20 }}>
+      <svg style={{ position:"absolute", left:13, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }} width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder={placeholder}
+        style={{ width:"100%", padding:"11px 14px 11px 38px", border:"1.5px solid #E8EAED", borderRadius:11, fontSize:13.5, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none", boxShadow:"0 1px 3px rgba(0,0,0,0.04)", transition:"border-color 0.15s" }}
+        onFocus={e => e.target.style.borderColor="#0F1117"}
+        onBlur={e => e.target.style.borderColor="#E8EAED"}
+      />
+      {search && <button onClick={() => setSearch("")} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"#9CA3AF", padding:2 }}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>}
+    </div>
+  );
+}
+
+function SearchResults({ results, search }) {
+  return (
+    <div>
+      <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
+        {results.length} result{results.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
       </div>
     </div>
   );
@@ -646,9 +863,9 @@ function GsCommentList({ comments }) {
 }
 
 // ── New Garment Sample Modal (factory) ────────────────────────────────────────
-function GsNewSampleModal({ onClose, onSubmit, existingProductNames }) {
+function GsNewSampleModal({ onClose, onSubmit, existingProductNames, defaultProductName="" }) {
   const [step,        setStep]       = React.useState(1);
-  const [productName, setProductName]= React.useState("");
+  const [productName, setProductName]= React.useState(defaultProductName);
   const [factory,     setFactory]    = React.useState("");
   const [dateSent,    setDateSent]   = React.useState(new Date().toISOString().slice(0,10));
   const [notes,       setNotes]      = React.useState("");
@@ -684,7 +901,9 @@ function GsNewSampleModal({ onClose, onSubmit, existingProductNames }) {
     close();
   }
 
-
+  const inp = { width:"100%", padding:"9px 11px", border:"1.5px solid #E5E7EB",
+    borderRadius:8, fontSize:13, fontFamily:"inherit", color:"#111827",
+    background:"#fff", outline:"none", boxSizing:"border-box" };
   const steps = ["Details", "Photos & files"];
   const isMatch = existingProductNames.some(n => n.toLowerCase() === productName.trim().toLowerCase());
 
@@ -907,7 +1126,9 @@ function GsNewVersionModal({ sample, onClose, onSubmit }) {
     close();
   }
 
-
+  const inp = { width:"100%", padding:"9px 11px", border:"1.5px solid #E5E7EB",
+    borderRadius:8, fontSize:13, fontFamily:"inherit", color:"#111827",
+    background:"#fff", outline:"none", boxSizing:"border-box" };
   const nextVer = sample.versions.length + 1;
 
   return (
@@ -932,7 +1153,7 @@ function GsNewVersionModal({ sample, onClose, onSubmit }) {
             </div>
             <button onClick={close} style={{ width:30, height:30, borderRadius:8,
               border:"1px solid #E5E7EB", background:"transparent", cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center",}}>
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
@@ -1005,6 +1226,71 @@ function GsNewVersionModal({ sample, onClose, onSubmit }) {
   );
 }
 
+// ── CommentSection — defined outside GsReviewModal to prevent re-render focus loss ──
+function CommentSection({ label, rows, setter, sKey, addRow, updateText, removeRow,
+  addPhotoToRow, removePhotoFromRow, photoRefs, inp, lbl }) {
+  return (
+    <div>
+      <div style={lbl}>{label}
+        <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0,
+          color:"#C4C9D4" }}> — optional</span>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {rows.map((row, i) => {
+          const rk = `${sKey}-${i}`;
+          return (
+            <div key={i} style={{ background:"#FAFAFA", border:"1px solid #F3F4F6",
+              borderRadius:9, padding:"10px 12px" }}>
+              <div style={{ display:"flex", gap:6, alignItems:"flex-start", marginBottom:6 }}>
+                <span style={{ fontSize:11, color:"#C4C9D4", width:16, flexShrink:0,
+                  paddingTop:10, textAlign:"center" }}>{i+1}</span>
+                <textarea value={row.text} onChange={e=>updateText(setter,i,e.target.value)}
+                  placeholder="Add comment..." rows={2}
+                  style={{...inp,flex:1,padding:"7px 10px",resize:"none",lineHeight:1.5,background:"#fff"}} />
+                {rows.length>1 && (
+                  <button onClick={()=>removeRow(setter,i)}
+                    style={{background:"none",border:"none",color:"#C4C9D4",
+                      cursor:"pointer",fontSize:16,padding:"6px 2px",flexShrink:0}}>×</button>
+                )}
+              </div>
+              {row.photos.length>0 && (
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6,paddingLeft:22}}>
+                  {row.photos.map((ph,pi)=>(
+                    <div key={pi} style={{position:"relative"}}>
+                      <img src={ph.dataUrl} alt="" style={{width:52,height:44,objectFit:"cover",borderRadius:6,border:"1px solid #E5E7EB"}}/>
+                      <button onClick={()=>removePhotoFromRow(setter,i,pi)}
+                        style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:"50%",background:"#111827",border:"none",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9}}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{paddingLeft:22}}>
+                <input ref={el=>photoRefs.current[rk]=el} type="file" accept="image/*"
+                  style={{display:"none"}}
+                  onChange={e=>{if(e.target.files[0])addPhotoToRow(setter,i,e.target.files[0]);e.target.value="";}} />
+                <button onClick={()=>photoRefs.current[rk]?.click()}
+                  style={{background:"none",border:"1px dashed #E5E7EB",borderRadius:5,
+                    padding:"3px 9px",color:"#9CA3AF",cursor:"pointer",fontSize:11,
+                    fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>Add photo
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        <button onClick={()=>addRow(setter)}
+          style={{background:"none",border:"none",color:"#9CA3AF",cursor:"pointer",
+            fontSize:12,fontFamily:"inherit",textAlign:"left",padding:"2px 0"}}>
+          + Add comment
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Brand Review Modal ────────────────────────────────────────────────────────
 function GsReviewModal({ sample, versionIdx, onClose, onSubmit }) {
   const ver = sample.versions[versionIdx];
@@ -1043,15 +1329,20 @@ function GsReviewModal({ sample, versionIdx, onClose, onSubmit }) {
       versionId: ver.airtableId,
       garmentSampleId: sample.id,
       status, nextSteps, summary,
-      fitComments:  fit.filter(r=>r.text.trim()),
-      mfgComments:  mfg.filter(r=>r.text.trim()),
-      obsComments:  obs.filter(r=>r.text.trim()),
+      // Keep a row if it has text OR at least one photo — don't drop photo-only comments
+      fitComments:  fit.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
+      mfgComments:  mfg.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
+      obsComments:  obs.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
       measFile,
     });
     close();
   }
 
-
+  const inp = { width:"100%", padding:"8px 10px", border:"1.5px solid #E5E7EB",
+    borderRadius:7, fontSize:13, fontFamily:"inherit", color:"#111827",
+    background:"#fff", outline:"none", boxSizing:"border-box" };
+  const lbl = { fontSize:10, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase",
+    letterSpacing:"0.07em", display:"block", marginBottom:5 };
   const divLine = { height:1, background:"#F3F4F6", margin:"4px 0 16px" };
 
   const STATUS_OPTS = [
@@ -1062,68 +1353,6 @@ function GsReviewModal({ sample, versionIdx, onClose, onSubmit }) {
     { key:"Other",                  label:"Other",                   col:"#6B7280", bg:"#F3F4F6" },
   ];
 
-  function CommentSection({ label, rows, setter, sKey }) {
-    return (
-      <div>
-        <div style={lbl}>{label}
-          <span style={{ fontWeight:400, textTransform:"none", letterSpacing:0,
-            color:"#C4C9D4" }}> — optional</span>
-        </div>
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          {rows.map((row, i) => {
-            const rk = `${sKey}-${i}`;
-            return (
-              <div key={i} style={{ background:"#FAFAFA", border:"1px solid #F3F4F6",
-                borderRadius:9, padding:"10px 12px" }}>
-                <div style={{ display:"flex", gap:6, alignItems:"flex-start", marginBottom:6 }}>
-                  <span style={{ fontSize:11, color:"#C4C9D4", width:16, flexShrink:0,
-                    paddingTop:10, textAlign:"center" }}>{i+1}</span>
-                  <textarea value={row.text} onChange={e=>updateText(setter,i,e.target.value)}
-                    placeholder="Add comment..." rows={2}
-                    style={{...inp,flex:1,padding:"7px 10px",resize:"none",lineHeight:1.5,background:"#fff"}} />
-                  {rows.length>1 && (
-                    <button onClick={()=>removeRow(setter,i)}
-                      style={{background:"none",border:"none",color:"#C4C9D4",
-                        cursor:"pointer",fontSize:16,padding:"6px 2px",flexShrink:0}}>×</button>
-                  )}
-                </div>
-                {row.photos.length>0 && (
-                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6,paddingLeft:22}}>
-                    {row.photos.map((ph,pi)=>(
-                      <div key={pi} style={{position:"relative"}}>
-                        <img src={ph.dataUrl} alt="" style={{width:52,height:44,objectFit:"cover",borderRadius:6,border:"1px solid #E5E7EB"}}/>
-                        <button onClick={()=>removePhotoFromRow(setter,i,pi)}
-                          style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:"50%",background:"#111827",border:"none",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9}}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{paddingLeft:22}}>
-                  <input ref={el=>photoRefs.current[rk]=el} type="file" accept="image/*"
-                    style={{display:"none"}}
-                    onChange={e=>{if(e.target.files[0])addPhotoToRow(setter,i,e.target.files[0]);e.target.value="";}} />
-                  <button onClick={()=>photoRefs.current[rk]?.click()}
-                    style={{background:"none",border:"1px dashed #E5E7EB",borderRadius:5,
-                      padding:"3px 9px",color:"#9CA3AF",cursor:"pointer",fontSize:11,
-                      fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}}>
-                    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
-                    </svg>Add photo
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-          <button onClick={()=>addRow(setter)}
-            style={{background:"none",border:"none",color:"#9CA3AF",cursor:"pointer",
-              fontSize:12,fontFamily:"inherit",textAlign:"left",padding:"2px 0"}}>
-            + Add comment
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div onClick={e=>e.target===e.currentTarget&&close()}
@@ -1164,9 +1393,18 @@ function GsReviewModal({ sample, versionIdx, onClose, onSubmit }) {
               style={{...inp,resize:"none",lineHeight:1.55}} />
           </div>
           <div style={divLine}/>
-          <CommentSection label="Fit & function" rows={fit} setter={setFit} sKey="fit"/>
-          <CommentSection label="Manufacturing"  rows={mfg} setter={setMfg} sKey="mfg"/>
-          <CommentSection label="Observations"   rows={obs} setter={setObs} sKey="obs"/>
+          <CommentSection label="Fit & function" rows={fit} setter={setFit} sKey="fit"
+            addRow={addRow} updateText={updateText} removeRow={removeRow}
+            addPhotoToRow={addPhotoToRow} removePhotoFromRow={removePhotoFromRow}
+            photoRefs={photoRefs} inp={inp} lbl={lbl}/>
+          <CommentSection label="Manufacturing" rows={mfg} setter={setMfg} sKey="mfg"
+            addRow={addRow} updateText={updateText} removeRow={removeRow}
+            addPhotoToRow={addPhotoToRow} removePhotoFromRow={removePhotoFromRow}
+            photoRefs={photoRefs} inp={inp} lbl={lbl}/>
+          <CommentSection label="Observations" rows={obs} setter={setObs} sKey="obs"
+            addRow={addRow} updateText={updateText} removeRow={removeRow}
+            addPhotoToRow={addPhotoToRow} removePhotoFromRow={removePhotoFromRow}
+            photoRefs={photoRefs} inp={inp} lbl={lbl}/>
           <div style={divLine}/>
           {/* Measurement file upload */}
           <div>
@@ -1266,50 +1504,42 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
   };
 
   return (
-    <div style={{background:"#fff",border:"1px solid #E8EAED",borderRadius:16,
-      overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
-      {/* Sticky header */}
-      <div style={{padding:"18px 22px 0",borderBottom:"1px solid #F3F4F6",
-        position:"sticky",top:0,background:"#fff",zIndex:2}}>
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
-          <div>
-            <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",
-              color:"#9CA3AF",display:"flex",alignItems:"center",gap:3,fontSize:12,
-              fontFamily:"inherit",padding:0,marginBottom:6}}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="15 18 9 12 15 6"/>
-              </svg>All samples
-            </button>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
-              <span style={{fontSize:17,fontWeight:700,letterSpacing:"-0.02em",color:"#0F1117"}}>{sample.productName}</span>
-              <span style={{padding:"1px 7px",background:isLatest?"#111827":"#F3F4F6",borderRadius:4,
-                fontSize:11,fontWeight:700,color:isLatest?"#fff":"#374151",fontFamily:"monospace"}}>
-                Proto {ver.versionNum}
-              </span>
-              <GsBadge status={ver.status}/>
-              {!isLatest&&<span style={{fontSize:11,color:"#9CA3AF",fontStyle:"italic"}}>— historical view</span>}
-            </div>
-            <div style={{fontSize:12,color:"#9CA3AF",display:"flex",gap:4,flexWrap:"wrap"}}>
-              <span>{sample.factory||""}</span>
-              {sample.factory&&<span style={{color:"#E5E7EB"}}>·</span>}
-              <span>Sent {ver.dateReceived}</span>
-              {d&&<><span style={{color:"#E5E7EB"}}>·</span><span>Reviewed {d.date}</span></>}
-            </div>
-          </div>
+    <div>
+      {/* Breadcrumb header — matches MaterialDetail exactly */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <button onClick={onBack}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
+              display:"flex", alignItems:"center", gap:4, fontSize:13, fontFamily:"inherit", padding:0 }}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <span style={{ fontSize:13, color:"#6B7280" }}>Garment Samples</span>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{sample.productName}</span>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ padding:"2px 8px", background:isLatest?"#111827":"#F3F4F6",
+            borderRadius:4, fontSize:11, fontWeight:700,
+            color:isLatest?"#fff":"#374151", fontFamily:"monospace" }}>
+            Proto {ver.versionNum}
+          </span>
+          <GsBadge status={ver.status}/>
+          {!isLatest&&<span style={{fontSize:11,color:"#9CA3AF",fontStyle:"italic"}}>historical</span>}
           {view==="brand"&&isLatest&&!d&&(
             <button onClick={()=>setShowReview(true)}
-              style={{padding:"8px 16px",background:"#0F1117",color:"#fff",
+              style={{padding:"7px 14px",background:"#0F1117",color:"#fff",
                 border:"none",borderRadius:8,fontSize:13,fontWeight:600,
-                cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                cursor:"pointer",fontFamily:"inherit"}}>
               Review sample
             </button>
           )}
         </div>
       </div>
 
-      {/* Two-column body */}
-      <div style={{padding:"18px 22px 22px",display:"grid",
-        gridTemplateColumns:"1fr 1fr",gap:20}}>
+      {/* Two-column body — matches MaterialDetail layout */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, alignItems:"start" }}>
         {/* Left: photos */}
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div>
@@ -1368,14 +1598,19 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
               </div>
             </div>
           )}
-          {/* Dates */}
-          <div style={card}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div><div style={lbl}>Date sent</div><div style={{fontSize:13,fontWeight:500}}>{ver.dateReceived}</div></div>
-              <div><div style={lbl}>Date reviewed</div>
-                <div style={{fontSize:13,fontWeight:500}}>{d?.date||<span style={{color:"#C4C9D4"}}>Pending</span>}</div>
+          {/* Metadata — matches MaterialDetail 3-col grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
+            {[
+              ["Factory", sample.factory||"—"],
+              ["Sent",    formatDate(ver.dateReceived)],
+              ["Reviewed", d ? formatDate(d.date) : "Pending"],
+            ].map(([k,val])=>(
+              <div key={k} style={{ background:"#F9FAFB", borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+                  letterSpacing:"0.06em", marginBottom:3 }}>{k}</div>
+                <div style={{ fontSize:13, fontWeight:500, color: val==="Pending" ? "#C4C9D4" : "#111827" }}>{val}</div>
               </div>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -1443,32 +1678,33 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
           )}
 
           {/* Version history */}
-          {sample.versions.length>1&&(
-            <div>
-              <div style={lbl}>Version history</div>
-              <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                {[...sample.versions].reverse().map((v,ri)=>{
-                  const idx = sample.versions.length-1-ri;
-                  const isAct = idx===activeIdx;
-                  return (
-                    <div key={v.versionNum} onClick={()=>setActiveIdx(idx)}
-                      style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                        padding:"8px 10px",borderRadius:7,cursor:"pointer",
-                        background:isAct?"#F3F4F6":"transparent",transition:"background 0.08s"}}
-                      onMouseEnter={e=>{if(!isAct)e.currentTarget.style.background="#FAFAFA";}}
-                      onMouseLeave={e=>{if(!isAct)e.currentTarget.style.background="transparent";}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:12,fontWeight:isAct?700:500,
-                          color:isAct?"#111827":"#6B7280",fontFamily:"monospace"}}>
-                          Proto {v.versionNum}
-                        </span>
-                        <span style={{fontSize:12,color:"#9CA3AF"}}>{v.dateReceived}</span>
-                      </div>
-                      <GsBadge status={v.status}/>
+          {sample.versions.length>0&&(
+            <div style={{ padding:"12px 14px", background:"#F9FAFB", borderRadius:8, border:"1px solid #F3F4F6" }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#9CA3AF",
+                textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>Version history</div>
+              {[...sample.versions].reverse().map((v,ri) => {
+                const idx = sample.versions.length-1-ri;
+                const isAct = idx===activeIdx;
+                return (
+                  <div key={v.versionNum} onClick={()=>setActiveIdx(idx)}
+                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                      padding:"9px 12px", borderRadius:8, cursor:"pointer", marginBottom:2,
+                      background: isAct ? "#111827" : "#fff",
+                      border: isAct ? "1px solid #111827" : "1px solid #F3F4F6",
+                      transition:"all 0.1s" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:12, fontWeight:isAct?700:500,
+                        color:isAct?"#fff":"#374151", fontFamily:"monospace" }}>
+                        V{v.versionNum}
+                      </span>
+                      <span style={{ fontSize:12, color:isAct?"rgba(255,255,255,0.55)":"#9CA3AF" }}>
+                        {formatDate(v.dateReceived)}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
+                    <GsBadge status={v.status}/>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1488,12 +1724,15 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
   );
 }
 
-
-
+const thStyle = { padding:"9px 14px", textAlign:"left", fontSize:10.5, fontWeight:700, color:"#C4C9D4", textTransform:"uppercase", letterSpacing:"0.07em", whiteSpace:"nowrap" };
 export default function App() {
 
   const [view,    setView]    = useState("factory"); // "factory" | "brand"
-  const [section, setSection] = useState("materials"); // "materials" | "samples"
+  const [section, setSection] = useState("samples"); // "materials" | "samples"
+  // ---- product tabs (open products in sidebar) ----
+  const [openTabs,    setOpenTabs]    = useState([]); // array of product ids
+  const [activeTab,   setActiveTab]   = useState(null); // currently selected product id
+  const [tabSection,  setTabSection]  = useState({}); // { [productId]: "materials" | "samples" }
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -1513,16 +1752,62 @@ export default function App() {
   const [showNewGs,   setShowNewGs]   = useState(false);
   const [gSearch,     setGSearch]     = useState("");
 
+  const [gError, setGError] = useState(null);
+
   // Load garment samples when section switches to "samples"
   useEffect(() => {
     if (section !== "samples" || gSamples.length > 0) return;
     setGLoading(true);
+    setGError(null);
     loadGarmentSamples()
       .then(data => { setGSamples(data); setGLoading(false); })
-      .catch(err  => { console.error("Garment samples load error:", err); setGLoading(false); });
+      .catch(err  => {
+        console.error("Garment samples load error:", err);
+        setGError(err.message);
+        setGLoading(false);
+      });
   }, [section]);
 
+  function retryGarmentSamples() {
+    setGError(null);
+    setGLoading(true);
+    loadGarmentSamples()
+      .then(data => { setGSamples(data); setGLoading(false); })
+      .catch(err  => { setGError(err.message); setGLoading(false); });
+  }
+
   const gSelectedSample = gSelected ? gSamples.find(s => s.id === gSelected) : null;
+
+  // ---- tab helpers ----
+  function openTab(productId) {
+    setOpenTabs(t => t.includes(productId) ? t : [...t, productId]);
+    setActiveTab(productId);
+    setSelected(null); setGSelected(null);
+    // Load garment samples if not yet loaded
+    if (gSamples.length === 0 && !gLoading) {
+      setGLoading(true);
+      loadGarmentSamples()
+        .then(data => { setGSamples(data); setGLoading(false); })
+        .catch(err  => { setGError(err.message); setGLoading(false); });
+    }
+  }
+  function closeTab(productId, e) {
+    e.stopPropagation();
+    setOpenTabs(t => {
+      const next = t.filter(id => id !== productId);
+      if (activeTab === productId) setActiveTab(next[next.length-1] || null);
+      return next;
+    });
+    if (activeTab === productId) { setSelected(null); setGSelected(null); }
+  }
+  function setTabSectionForActive(sec) {
+    if (!activeTab) return;
+    setTabSection(s => ({ ...s, [activeTab]: sec }));
+    setGSelected(null);
+  }
+
+  const activeProduct = activeTab ? products.find(p => p.id === activeTab) : null;
+  const activeTabSection = activeTab ? (tabSection[activeTab] || "materials") : "materials";
 
   // ---- garment sample mutators ----
   async function handleGsSubmit(data) {
@@ -1683,7 +1968,30 @@ export default function App() {
       }));
     } catch(err) {
       console.error("Failed to submit review:", err);
-      alert("Could not save review. Check console for details.");
+      alert("Could not save review.\n\nError: " + (err?.message || String(err)) + "\n\nCheck that your Airtable Sample Versions table has all required fields (see setup guide).");
+    }
+  }
+
+  async function handleDeleteGarmentSample(sampleId) {
+    const sample = gSamples.find(s => s.id === sampleId);
+    if (!sample) return;
+
+    const versionCount = sample.versions.length;
+    const msg = versionCount > 0
+      ? `Delete "${sample.productName}"?\n\nThis will permanently delete the sample and ${versionCount} version${versionCount !== 1 ? "s" : ""}. This cannot be undone.`
+      : `Delete "${sample.productName}"?\n\nThis cannot be undone.`;
+
+    if (!window.confirm(msg)) return;
+
+    try {
+      if (sample.airtableId && !sample.airtableId.startsWith("local_")) {
+        await deleteGarmentSample(sample.airtableId);
+      }
+      setGSamples(p => p.filter(s => s.id !== sampleId));
+      if (gSelected === sampleId) setGSelected(null);
+    } catch(err) {
+      console.error("Delete failed:", err);
+      alert("Could not delete — please try again.\n\n" + err.message);
     }
   }
 
@@ -1978,28 +2286,31 @@ export default function App() {
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
-    const hasSubmissions = product.materialIds.some(id => {
+    const submissionCount = product.materialIds.filter(id => {
       const m = materials.find(x => x.id === id);
       return m && m.materialName !== "__empty__" && m.versions.length > 0;
-    });
+    }).length;
 
-    const confirmed = hasSubmissions
-      ? window.confirm(`Delete "${product.name}" and all its submissions? This cannot be undone.`)
-      : window.confirm(`Delete "${product.name}"?`);
-    if (!confirmed) return;
+    const msg = submissionCount > 0
+      ? `Delete "${product.name}"?
+
+This will permanently delete the product and ${submissionCount} material submission${submissionCount !== 1 ? "s" : ""}. This cannot be undone.`
+      : `Delete "${product.name}"?
+
+This cannot be undone.`;
+
+    if (!window.confirm(msg)) return;
 
     try {
-      const airtableProductId = product.airtableProductId;
-      if (airtableProductId) {
-        await deleteProduct(airtableProductId);
+      if (product.airtableProductId) {
+        await deleteProduct(product.airtableProductId);
       }
-      // Remove from local state
       setMaterials(p => p.filter(m => !product.materialIds.includes(m.id)));
-      // If we're navigated inside this product, go home
       if (nav === productId) setNav(null);
+      if (bNav === productId) setBNav(null);
     } catch(err) {
       console.error("Delete failed:", err);
-      alert("Could not delete product: " + err.message);
+      alert("Could not delete — please try again.\n\n" + err.message);
     }
   }
 
@@ -2020,7 +2331,8 @@ export default function App() {
     : null;
 
   // ---- style constants ----
-  const ddArrow = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")";
+  const inp = { padding:"7px 10px", border:"1px solid #E5E7EB", borderRadius:6, fontSize:12, fontFamily:"inherit", color:"#111827", background:"#fff", outline:"none" };
+  const chevron = <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>;
 
   // ---- icons ----
   const icoFolder   = <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.8"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>;
@@ -2046,19 +2358,14 @@ export default function App() {
 
   // ---- materials table (shared) ----
   function MatTable({ rows, showContext = false }) {
-    // Skip materials with no versions (sentinels) — they have no latest
-    const filtered = rows.filter(m =>
-      m.latest &&
-      (!filters.type   || m.materialType     === filters.type) &&
-      (!filters.status || m.latest.status    === filters.status)
-    );
+    const filtered = rows.filter(m => m.latest && (!filters.type || m.materialType === filters.type) && (!filters.status || m.latest.status === filters.status));
     return (
       <div style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr style={{ borderBottom:"1px solid #F3F4F6", background:"#FAFAFA" }}>
-              {showContext && <th className="th">Product / Factory</th>}
-              {["Type","Material","Version","Shipment","Status"].map(h => <th key={h} className="th">{h}</th>)}
+              {showContext && <th style={thStyle}>Product / Factory</th>}
+              {["Type","Material","Version","Shipment","Status"].map(h => <th key={h} style={thStyle}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -2066,7 +2373,24 @@ export default function App() {
               ? <tr><td colSpan={showContext ? 6 : 5} style={{ padding:48, textAlign:"center", color:"#C4C9D4", fontSize:13 }}>No materials found</td></tr>
               : filtered.map((m, idx) => (
                 <tr key={m.id} className="mrow"
-                  onClick={() => { if (!m.latest) return; setSelected(m.id); setBrandComment(m.latest.brandComment||""); setShowNewVersionFor(null); }}
+                  onClick={() => {
+                    setSelected(m.id);
+                    setBrandComment(m.latest?.brandComment||"");
+                    setShowNewVersionFor(null);
+                    // If in search mode, also nav into the product so detail view renders
+                    if (searchResults !== null) {
+                      // Find the product by airtableProductId or by matching name
+                      const prod = products.find(p =>
+                        p.airtableProductId === m.airtableProductId ||
+                        p.name === m.styleName
+                      );
+                      if (prod) {
+                        if (view === "factory") goProd(prod.id);
+                        else bGoProd(prod.id);
+                      }
+                      setSearch("");
+                    }
+                  }}
                   style={{ borderBottom: idx < filtered.length-1 ? "1px solid #F9FAFB" : "none", background:"#fff", transition:"background 0.08s" }}>
                   {showContext && (
                     <td style={{ padding:"10px 14px" }}>
@@ -2120,7 +2444,7 @@ export default function App() {
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             </button>
           )}
-          {ICO.chevron}
+          {chevron}
         </div>
       </div>
     );
@@ -2150,58 +2474,88 @@ export default function App() {
 
 
   // ---- loading / error screens ----
+  const screenStyle = { display:"flex", alignItems:"center", justifyContent:"center",
+    height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", background:"#F4F5F7" };
+
   if (loading) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", color:"#9CA3AF", fontSize:14, background:"#F9FAFB" }}>
+    <div style={screenStyle}>
       <div style={{ textAlign:"center" }}>
-        <div style={{ width:32, height:32, border:"2.5px solid #E5E7EB", borderTopColor:"#111827", borderRadius:"50%", animation:"spin 0.7s linear infinite", margin:"0 auto 14px" }} />
-        Loading...
+        <div style={{ width:36, height:36, border:"2.5px solid #E5E7EB",
+          borderTopColor:"#111827", borderRadius:"50%",
+          animation:"spin 0.7s linear infinite", margin:"0 auto 16px" }} />
+        <div style={{ fontSize:14, fontWeight:500, color:"#374151" }}>Loading</div>
+        <div style={{ fontSize:12, color:"#9CA3AF", marginTop:4 }}>Connecting to Airtable…</div>
       </div>
     </div>
   );
+
   if (loadError) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", fontFamily:"DM Sans, Helvetica Neue, sans-serif", color:"#EF4444", fontSize:13, background:"#F9FAFB", padding:24 }}>
-      <div style={{ textAlign:"center", maxWidth:360 }}>
-        <div style={{ fontWeight:600, marginBottom:8 }}>Could not connect to Airtable</div>
-        <div style={{ color:"#9CA3AF", lineHeight:1.6 }}>{loadError}</div>
-        <div style={{ color:"#C4C9D4", fontSize:11.5, marginTop:12 }}>Check your AIRTABLE_TOKEN and AIRTABLE_BASE_ID in Vercel environment variables.</div>
+    <div style={screenStyle}>
+      <div style={{ textAlign:"center", maxWidth:380, padding:24 }}>
+        <div style={{ width:48, height:48, borderRadius:12, background:"#FEF2F2",
+          display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+          <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
+            stroke="#EF4444" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div style={{ fontSize:15, fontWeight:600, color:"#111827", marginBottom:6 }}>
+          Could not connect to Airtable
+        </div>
+        <div style={{ fontSize:13, color:"#6B7280", lineHeight:1.65, marginBottom:20 }}>
+          {loadError}
+        </div>
+        <div style={{ fontSize:11, color:"#C4C9D4", marginBottom:20, lineHeight:1.6 }}>
+          Check your <code style={{ background:"#F3F4F6", padding:"1px 5px",
+            borderRadius:3, fontFamily:"monospace", fontSize:11 }}>AIRTABLE_TOKEN</code> and{" "}
+          <code style={{ background:"#F3F4F6", padding:"1px 5px",
+            borderRadius:3, fontFamily:"monospace", fontSize:11 }}>AIRTABLE_BASE_ID</code>{" "}
+          in Vercel environment variables.
+        </div>
+        <button
+          onClick={() => { setLoadError(null); setLoading(true); loadAllData().then(d=>{setMaterials(d);setLoading(false);}).catch(e=>{setLoadError(e.message);setLoading(false);}); }}
+          style={{ padding:"10px 24px", background:"#111827", color:"#fff",
+            border:"none", borderRadius:8, fontSize:13, fontWeight:600,
+            cursor:"pointer", fontFamily:"inherit" }}>
+          Retry
+        </button>
       </div>
     </div>
   );
 
   return (
-    <div className="app-root">
-
+    <div style={{ fontFamily:"DM Sans, Helvetica Neue, sans-serif", background:"#F4F5F7", minHeight:"100vh", color:"#111827", display:"flex", flexDirection:"column" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=DM+Mono:wght@400;500;600&display=swap');
+        * { box-sizing:border-box; margin:0; padding:0; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+        ::-webkit-scrollbar { width:4px; }
+        ::-webkit-scrollbar-thumb { background:#E2E5EA; border-radius:4px; }
+        input:focus, select:focus, textarea:focus { outline:none; border-color:#111827 !important; }
+        .prow { transition: box-shadow 0.15s, transform 0.15s, background 0.1s; cursor:pointer; }
+        .prow:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; transform: translateY(-1px); background:#fff !important; }
+        .mrow:hover { background:#F8F8FA !important; cursor:pointer; }
+        .scard { transition: box-shadow 0.15s, transform 0.12s; cursor:pointer; }
+        .scard:hover { box-shadow:0 4px 16px rgba(0,0,0,0.08) !important; transform:translateY(-1px); }
+        .navitem:hover { background:#F3F4F6 !important; }
+        select { appearance:none; }
+      `}</style>
 
       {/* ===== NAV BAR ===== */}
       <div style={{ background:"#fff", borderBottom:"1px solid #E8EAED", flexShrink:0 }}>
         <div style={{ height:56, display:"flex", alignItems:"center",
-          justifyContent:"space-between", padding:"0 32px" }}>
+          justifyContent:"space-between", padding:"0 24px" }}>
 
-          {/* Logo + breadcrumb */}
-          <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden", minWidth:0 }}>
+          {/* Logo + app title */}
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <div style={{ width:24, height:24, background:"#111827", borderRadius:6, display:"flex",
               alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-              {ICO.check}
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             </div>
-
-            {section === "materials" && view === "factory" && (
-              <>
-                <BCBtn label="Approvals" dim={!!nav} onClick={goHome} />
-                {curProduct && <><BCSep/><BCBtn label={curProduct.name} dim={false} onClick={null} /></>}
-              </>
-            )}
-            {section === "materials" && view === "brand" && (
-              <>
-                <BCBtn label="Approvals" dim={!!bNav} onClick={bGoHome} />
-                {curBProduct && <><BCSep/><BCBtn label={curBProduct.name} dim={false} onClick={null} /></>}
-              </>
-            )}
-            {section === "samples" && (
-              <>
-                <BCBtn label="Approvals" dim={!!gSelected} onClick={() => { setGSelected(null); setGSearch(""); }} />
-                {gSelectedSample && <><BCSep/><BCBtn label={gSelectedSample.productName} dim={false} onClick={null} /></>}
-              </>
-            )}
+            <span style={{ fontSize:14, fontWeight:700, color:"#111827", letterSpacing:"-0.01em" }}>Approvals</span>
           </div>
 
           {/* Factory / Brand pill toggle */}
@@ -2232,210 +2586,476 @@ export default function App() {
       <div style={{ display:"flex", flex:1, minHeight:0, overflow:"hidden" }}>
 
         {/* ── Sidebar ── */}
-        <div style={{ width:200, background:"#fff", borderRight:"1px solid #E8EAED",
-          flexShrink:0, padding:"16px 10px", display:"flex", flexDirection:"column", gap:2,
-          overflowY:"auto" }}>
+        <div style={{ width:220, background:"#fff", borderRight:"1px solid #E8EAED",
+          flexShrink:0, display:"flex", flexDirection:"column", overflowY:"auto" }}>
 
-          <div style={{ fontSize:10, fontWeight:700, color:"#C4C9D4", textTransform:"uppercase",
-            letterSpacing:"0.08em", padding:"0 8px", marginBottom:6 }}>Approvals</div>
-
-          {[
-            { key:"materials", label:"Materials",
-              count: materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0
-                && m.versions[m.versions.length-1].status === "Pending").length,
-              icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
-            { key:"samples", label:"Garment Samples",
-              count: gSamples.filter(s => s.status === "Awaiting Review").length,
-              icon: <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
-          ].map(item => (
-            <button key={item.key} className="navitem"
-              onClick={() => { setSection(item.key); setGSelected(null); setNav(null); setBNav(null); }}
-              style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+          {/* Factory submit button + home — always at top */}
+          <div style={{ padding:"12px 10px", borderBottom: openTabs.length > 0 ? "1px solid #F3F4F6" : "none" }}>
+            {/* Home button */}
+            <button className="navitem"
+              onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}
+              style={{ display:"flex", alignItems:"center", gap:8, width:"100%",
                 padding:"8px 10px", borderRadius:7, border:"none", cursor:"pointer",
-                fontFamily:"inherit", textAlign:"left", width:"100%",
-                background: section===item.key ? "#F3F4F6" : "transparent",
-                transition:"background 0.1s" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ color: section===item.key ? "#0F1117" : "#9CA3AF",
-                  display:"flex", alignItems:"center" }}>{item.icon}</span>
-                <span style={{ fontSize:13, fontWeight: section===item.key ? 600 : 400,
-                  color: section===item.key ? "#0F1117" : "#6B7280" }}>{item.label}</span>
-              </div>
-              {item.count > 0 && (
-                <span style={{ fontSize:10, fontWeight:700, minWidth:18, height:18,
-                  borderRadius:9, background: section===item.key ? "#0F1117" : "#E5E7EB",
-                  color: section===item.key ? "#fff" : "#6B7280",
-                  display:"flex", alignItems:"center", justifyContent:"center", padding:"0 5px" }}>
-                  {item.count}
-                </span>
-              )}
+                fontFamily:"inherit",
+                background: !activeTab ? "#F3F4F6" : "transparent" }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={!activeTab?"#111827":"#9CA3AF"} strokeWidth="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+              <span style={{ fontSize:13, fontWeight: !activeTab ? 600 : 400,
+                color: !activeTab ? "#111827" : "#6B7280" }}>All Products</span>
             </button>
-          ))}
+            {/* New submission (factory) or placeholder */}
+            {view === "factory" && (
+              <button onClick={() => { if (activeTab) setShowNew(true); else setAddingProduct(true); }}
+                style={{ display:"flex", alignItems:"center", gap:6, width:"100%",
+                  padding:"8px 10px", borderRadius:7, border:"1px solid #E8EAED",
+                  background:"transparent", cursor:"pointer", fontFamily:"inherit",
+                  fontSize:12, fontWeight:600, color:"#374151", marginTop:4 }}>
+                {ICO.plus()}
+                {activeTab ? "New Submission" : "Add Product"}
+              </button>
+            )}
+          </div>
+
+          {/* Open product tabs */}
+          {openTabs.length > 0 && (
+            <div style={{ padding:"8px 10px", flex:1 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#C4C9D4", textTransform:"uppercase",
+                letterSpacing:"0.08em", padding:"0 4px", marginBottom:6 }}>Open</div>
+              {openTabs.map(tabId => {
+                const p = products.find(x => x.id === tabId);
+                if (!p) return null;
+                const isActive = tabId === activeTab;
+                const mats = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
+                const real = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                const pendingMat = real.filter(m => m.versions[m.versions.length-1].status === (view==="brand"?"Pending":"Rejected")).length;
+                const pendingGs  = gSamples.filter(s => s.productName === p.name &&
+                  s.status === (view==="brand"?"Awaiting Review":"New Sample Requested")).length;
+                const totalPending = pendingMat + pendingGs;
+                const thumb = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                return (
+                  <div key={tabId} onClick={() => { setActiveTab(tabId); setSelected(null); setGSelected(null); }}
+                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                      padding:"7px 8px", borderRadius:7, cursor:"pointer", marginBottom:2,
+                      background: isActive ? "#F3F4F6" : "transparent",
+                      transition:"background 0.1s" }}
+                    onMouseEnter={e => { if(!isActive) e.currentTarget.style.background="#FAFAFA"; }}
+                    onMouseLeave={e => { if(!isActive) e.currentTarget.style.background="transparent"; }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:7, minWidth:0 }}>
+                      {/* Mini thumb */}
+                      <div style={{ width:24, height:24, borderRadius:5, flexShrink:0, overflow:"hidden",
+                        background:"#F3F4F6", border:"1px solid #E8EAED" }}>
+                        {thumb
+                          ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                          : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                              <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>
+                            </div>
+                        }
+                      </div>
+                      <span style={{ fontSize:12.5, fontWeight: isActive ? 600 : 400,
+                        color: isActive ? "#111827" : "#6B7280",
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {p.name}
+                      </span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+                      {totalPending > 0 && (
+                        <span style={{ fontSize:9, fontWeight:700, width:16, height:16, borderRadius:"50%",
+                          background:"#EF4444", color:"#fff", display:"flex", alignItems:"center",
+                          justifyContent:"center" }}>{totalPending}</span>
+                      )}
+                      <button onClick={e => closeTab(tabId, e)}
+                        style={{ width:16, height:16, borderRadius:3, border:"none",
+                          background:"transparent", cursor:"pointer", display:"flex",
+                          alignItems:"center", justifyContent:"center", color:"#C4C9D4",
+                          fontSize:14, lineHeight:1, padding:0 }}
+                        onMouseEnter={e => { e.currentTarget.style.color="#6B7280"; e.currentTarget.style.background="#E5E7EB"; }}
+                        onMouseLeave={e => { e.currentTarget.style.color="#C4C9D4"; e.currentTarget.style.background="transparent"; }}>
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* ── Main scrollable content ── */}
-        <div style={{ flex:1, overflowY:"auto", padding:"24px 32px 80px", minWidth:0 }}>
+        <ErrorBoundary>
+        <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 100px", minWidth:0 }}>
 
         {/* ===== PAGE CONTENT ===== */}
-        <div>
 
-
-
-        {/* ===== MATERIALS SECTION ===== */}
-        {section === "materials" && (<>
-
-        {/* ---- FACTORY VIEW ---- */}
-        {view === "factory" && (
-          <>
-            {!nav && searchResults === null && (
-              <>
-                {/* Dashboard header */}
-                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:24 }}>
-                  <div>
-                    <div style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.03em", color:"#0F1117", lineHeight:1.1 }}>Material Approvals</div>
-                    {(() => {
-                      const allReal = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-                      const pending = allReal.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
-                      const prods   = products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length;
-                      const urgent  = allReal.filter(m => {
-                        const v = m.versions[m.versions.length-1];
-                        const days = v.submissionDate ? Math.floor((Date.now()-new Date(v.submissionDate))/(1000*60*60*24)) : 0;
-                        return v.status === "Pending" && days >= 5;
-                      }).length;
-                      return <div style={{ fontSize:13, color:"#8B909A", marginTop:5, fontWeight:500 }}>{pending} Pending · {prods} Product{prods!==1?"s":""}{urgent>0?` · ${urgent} Urgent`:""}</div>;
-                    })()}
-                  </div>
-                  <button onClick={() => setAddingProduct(true)} style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 18px", background:"#0F1117", color:"#fff", border:"none", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 2px 8px rgba(0,0,0,0.18)", letterSpacing:"-0.01em" }}>
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Add Product
-                  </button>
-                </div>
-
-                {/* Summary stat cards */}
-                {(() => {
-                  const allReal = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-                  const pending  = allReal.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
-                  const overdue  = allReal.filter(m => {
-                    const v = m.versions[m.versions.length-1];
-                    const days = v.submissionDate ? Math.floor((Date.now()-new Date(v.submissionDate))/(1000*60*60*24)) : 0;
-                    return v.status === "Pending" && days >= 5;
-                  }).length;
-                  const approved = allReal.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
-                  const cards = [
-                    { label:"Pending",           value:pending,  sub:"Pending",            icon:<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, bg:"#FFFBEB", ring:"#FDE68A", ic:"#FEF3C7" },
-                    { label:"Overdue",            value:overdue,  sub:"Overdue",            icon:<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, bg:"#FEF2F2", ring:"#FEE2E2", ic:"#FEE2E2" },
-                    { label:"Approved This Week", value:approved, sub:"Approved",           icon:<svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>, bg:"#ECFDF5", ring:"#A7F3D0", ic:"#D1FAE5" },
-                  ];
-                  return (
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:28 }}>
-                      {cards.map(c => (
-                        <div key={c.label} style={{ background:"#fff", border:`1px solid ${c.ring}`, borderRadius:14, padding:"18px 20px", display:"flex", alignItems:"center", gap:14 }}>
-                          <div style={{ width:42, height:42, borderRadius:10, background:c.ic, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{c.icon}</div>
-                          <div>
-                            <div style={{ fontSize:13, fontWeight:600, color:"#6B7280", marginBottom:2 }}>{c.label}</div>
-                            <div style={{ fontSize:28, fontWeight:800, color:"#0F1117", letterSpacing:"-0.04em", lineHeight:1 }}>{c.value}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </>
+        {/* ── HOME: no active tab — show all products ── */}
+        {!activeTab && (
+          <div style={{ maxWidth:900 }}>
+            {/* Factory: new submission button above search when no tabs open */}
+            {view === "factory" && openTabs.length === 0 && (
+              <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+                <button onClick={() => setAddingProduct(true)}
+                  style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px",
+                    background:"#111827", color:"#fff", border:"none", borderRadius:7,
+                    fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  {ICO.plus()} Add product
+                </button>
+              </div>
             )}
 
-            {/* Search bar */}
-            <SearchBar search={search} setSearch={setSearch} placeholder="Search products, materials, suppliers..." />
+            {/* Global search */}
+            <SearchBar search={search} setSearch={setSearch}
+              placeholder="Search products, materials, suppliers..." />
 
-            {searchResults !== null
-              ? (<div>
-                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
-                    {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
+            {searchResults !== null ? (
+              <div>
+                <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
+                  {searchResults.length} result{searchResults.length!==1?"s":""} for{" "}
+                  <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
+                </div>
+                <MatTable rows={searchResults} showContext />
+              </div>
+            ) : (
+              <div>
+                {/* Add product inline */}
+                {addingProduct && (
+                  <AddRow placeholder="Product name…"
+                    onAdd={addProduct} onCancel={() => setAddingProduct(false)} />
+                )}
+                {/* Product count */}
+                <div style={{ fontSize:12, color:"#9CA3AF", fontWeight:500, marginBottom:10 }}>
+                  {products.length} product{products.length!==1?"s":""}
+                </div>
+                {/* All product cards */}
+                {products.length === 0 && !addingProduct ? (
+                  <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff",
+                    borderRadius:12, border:"1px solid #E8EAED" }}>
+                    <div style={{ width:48, height:48, borderRadius:12, background:"#F3F4F6",
+                      display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+                      <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.6">
+                        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/>
+                      </svg>
+                    </div>
+                    <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:5 }}>No products yet</div>
+                    <div style={{ color:"#9CA3AF", fontSize:13 }}>
+                      {view==="factory" ? "Use \"Add product\" to get started" : "No products set up yet"}
+                    </div>
                   </div>
-                  <MatTable rows={searchResults} showContext />
-                 </div>)
-              : <>
-                  {/* L1: product cards */}
-                  {!nav && (
-                    <div>
-                      {products.length===0 && !addingProduct && (
-                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
-                          <div style={{ fontSize:32, marginBottom:10 }}>🎉</div>
-                          <div style={{ fontWeight:700, fontSize:15, color:"#111827", marginBottom:6 }}>No products yet</div>
-                          <div style={{ color:"#9CA3AF", fontSize:13 }}>Add a product to start tracking material approvals</div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                    {products.map(p => {
+                      const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
+                      const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
+                      const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
+                      const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
+                      const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                      const latestVer = real.length > 0 ? real[real.length-1].versions[real[real.length-1].versions.length-1] : null;
+                      const displayDate = latestVer ? (latestVer.approvalDate || latestVer.submissionDate) : null;
+                      const timeStr = relativeDate(displayDate);
+
+                      // Overall product status
+                      const hasPending  = pending > 0;
+                      const hasRejected = rejected > 0;
+                      const overallStatus = hasPending ? "Pending"
+                        : hasRejected ? "Rejected"
+                        : real.length > 0 && real.every(m => m.versions[m.versions.length-1].status === "Approved") ? "Approved"
+                        : real.length === 0 ? "No submissions" : "Mixed";
+                      const sc = STATUS_COLORS[overallStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
+
+                      // Garment sample counts for this product
+                      const gs = gSamples.filter(s => s.productName === p.name);
+                      const gsPending = gs.filter(s => s.status === "Awaiting Review").length;
+
+                      return (
+                        <div key={p.id} className="prow"
+                          onClick={() => openTab(p.id)}
+                          style={{ background:"#fff", border:"1px solid #E8EAED",
+                            borderRadius:14, padding:"14px 18px",
+                            display:"flex", alignItems:"center", gap:14,
+                            boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
+
+                          {/* Thumbnail */}
+                          <div style={{ width:52, height:52, borderRadius:10, flexShrink:0,
+                            overflow:"hidden", background:"#F3F4F6", border:"1px solid #E8EAED",
+                            display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            {thumb
+                              ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                              : <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5">
+                                  <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/>
+                                </svg>
+                            }
+                          </div>
+
+                          {/* Info */}
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                              <span style={{ fontSize:14, fontWeight:600, color:"#0F1117", letterSpacing:"-0.01em" }}>
+                                {p.name}
+                              </span>
+                              {real.length > 0 && (
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+                                  padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text,
+                                  fontSize:11, fontWeight:600 }}>
+                                  <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />
+                                  {overallStatus}
+                                </span>
+                              )}
+                              {gsPending > 0 && (
+                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+                                  padding:"2px 8px", borderRadius:20,
+                                  background:GS_STATUS_COLORS["Awaiting Review"].bg,
+                                  color:GS_STATUS_COLORS["Awaiting Review"].text,
+                                  fontSize:11, fontWeight:600 }}>
+                                  <span style={{ width:5, height:5, borderRadius:"50%", background:GS_STATUS_COLORS["Awaiting Review"].dot }} />
+                                  {gsPending} sample{gsPending!==1?"s":""} to review
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize:12, color:"#8B909A", display:"flex", gap:5, flexWrap:"wrap" }}>
+                              {real.length > 0 && <span>{real.length} material{real.length!==1?"s":""}</span>}
+                              {gs.length > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span>{gs.length} garment sample{gs.length!==1?"s":""}</span></>}
+                              {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{timeStr}</span></>}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
+                            <button onClick={e => { e.stopPropagation(); handleDeleteProduct(p.id); }}
+                              style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6",
+                                background:"transparent", cursor:"pointer", display:"flex",
+                                alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
+                              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                            </button>
+                            <button onClick={() => openTab(p.id)}
+                              style={{ display:"flex", alignItems:"center", gap:5,
+                                padding:"7px 14px", border:"none", borderRadius:8,
+                                fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                                background:"#F3F4F6", color:"#374151" }}>
+                              Open
+                              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                            </button>
+                          </div>
                         </div>
-                      )}
-                      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                        {products.map(p => {
-                          const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
-                          const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-                          const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
-                          const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
-                          const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
-                          const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-                          // Use approvalDate when available (approved/rejected), else submissionDate
-                          const latestMat = real.length > 0 ? real[real.length-1] : null;
-                          const latestVer = latestMat ? latestMat.versions[latestMat.versions.length-1] : null;
-                          const displayDate = latestVer
-                            ? (latestVer.approvalDate || latestVer.submissionDate)
-                            : null;
-                          const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
-                          const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+        {/* ── PRODUCT TAB: active product open ── */}
+        {activeTab && activeProduct && (
+          <div style={{ maxWidth:900 }}>
+            {/* Product header */}
+            <div style={{ marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+                <button onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}
+                  style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
+                    display:"flex", alignItems:"center", gap:4, fontSize:13, fontFamily:"inherit", padding:0 }}>
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                  All products
+                </button>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{activeProduct.name}</span>
+              </div>
 
-                          // Factory-specific status label: Rejected → Requires Resubmission
-                          const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
-                          const factoryLabel   = dominantStatus === "Rejected" ? "Requires Resubmission" : dominantStatus;
-                          const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
-                          // Resubmission pill gets a distinct orange-red colour
-                          const pillStyle = dominantStatus === "Rejected"
-                            ? { bg:"#FFF3E0", text:"#B45309", dot:"#F97316" }
-                            : sc;
+              {/* Section toggle: Materials / Garment Samples */}
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                {[
+                  { key:"materials", label:"Materials",
+                    icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
+                  { key:"samples",   label:"Garment Samples",
+                    icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
+                ].map(s => (
+                  <button key={s.key} onClick={() => { setTabSectionForActive(s.key); setSelected(null); setGSelected(null); }}
+                    style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+                      borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit",
+                      fontSize:13, fontWeight:600,
+                      background: activeTabSection===s.key ? "#111827" : "#F3F4F6",
+                      color:      activeTabSection===s.key ? "#fff"    : "#6B7280",
+                      transition:"all 0.12s" }}>
+                    {s.icon} {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                          // Button label: only "Review" when brand needs to act (pending).
-                          // Factory has nothing to action on pending — use "Open" instead.
-                          const btnLabel = rejected > 0 ? "Resubmit" : "Open";
-                          const btnStyle = rejected > 0
-                            ? { background:"#0F1117", color:"#fff" }
-                            : { background:"#F3F4F6", color:"#374151" };
+            {/* ── MATERIALS inside product ── */}
+            {activeTabSection === "materials" && (() => {
+              const scopedMats = materials.filter(m =>
+                activeProduct.materialIds.includes(m.id) &&
+                m.materialName !== "__empty__" && m.versions.length > 0
+              ).map(m => ({ ...m, latest: m.versions[m.versions.length-1] }));
+
+              if (selectedMaterial && activeProduct.materialIds.includes(selectedMaterial.id)) {
+                return (
+                  <MaterialDetail
+                    key={selectedMaterial.id}
+                    material={selectedMaterial}
+                    view={view}
+                    onClose={() => setSelected(null)}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    brandComment={brandComment}
+                    setBrandComment={setBrandComment}
+                    setMaterials={setMaterials}
+                    onSubmitNewVersion={handleNewVersion}
+                    showNewVersionFor={showNewVersionFor}
+                    setShowNewVersionFor={setShowNewVersionFor}
+                  />
+                );
+              }
+
+              return (
+                <div>
+                  <div style={{ display:"flex", gap:8, marginBottom:12, alignItems:"center" }}>
+                    <FilterBar />
+                    {view === "factory" && (
+                      <button onClick={() => setShowNew(true)}
+                        style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px",
+                          background:"#111827", color:"#fff", border:"none", borderRadius:7,
+                          fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
+                        {ICO.plus()} New Submission
+                      </button>
+                    )}
+                  </div>
+                  {scopedMats.length === 0 ? (
+                    <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff",
+                      borderRadius:12, border:"1px solid #E8EAED" }}>
+                      <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:4 }}>No submissions yet</div>
+                      {view === "factory" && <div style={{ color:"#9CA3AF", fontSize:13 }}>Use &quot;New Submission&quot; to add the first one</div>}
+                      {view === "brand"   && <div style={{ color:"#9CA3AF", fontSize:13 }}>Waiting for the factory to submit</div>}
+                    </div>
+                  ) : (
+                    <MatTable rows={scopedMats} />
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── GARMENT SAMPLES inside product ── */}
+            {activeTabSection === "samples" && (() => {
+              const productGs = gSamples.filter(s => s.productName === activeProduct.name);
+
+              if (gSelectedSample && gSelectedSample.productName === activeProduct.name) {
+                return (
+                  <div style={{ maxWidth:900 }}>
+                    <GsDetail
+                      key={gSelectedSample.id}
+                      sample={gSelectedSample}
+                      view={view}
+                      onBack={() => setGSelected(null)}
+                      onDecide={handleGsDecide}
+                      onSubmitVersion={handleGsNewVersion}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div>
+                  {/* Per-product GS search */}
+                  <SearchBar search={gSearch} setSearch={setGSearch}
+                    placeholder={`Search samples in ${activeProduct.name}...`} />
+
+                  {/* Header */}
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                    <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:500 }}>
+                      {productGs.length} sample{productGs.length!==1?"s":""}
+                    </span>
+                    {view === "factory" && (
+                      <button onClick={() => setShowNewGs(true)}
+                        style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+                          background:"#111827", color:"#fff", border:"none", borderRadius:7,
+                          fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                        {ICO.plus()} Submit sample
+                      </button>
+                    )}
+                  </div>
+
+                  {gLoading ? (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:48, gap:10, color:"#9CA3AF" }}>
+                      <Spinner /><span style={{ fontSize:13 }}>Loading samples…</span>
+                    </div>
+                  ) : productGs.length === 0 ? (
+                    <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff",
+                      borderRadius:12, border:"1px solid #E8EAED" }}>
+                      <div style={{ fontWeight:600, fontSize:14, color:"#374151", marginBottom:4 }}>No samples yet</div>
+                      <div style={{ color:"#9CA3AF", fontSize:13 }}>
+                        {view==="factory" ? "Submit the first sample to get started" : "Nothing to review right now"}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                      {productGs
+                        .filter(s => {
+                          if (!gSearch.trim()) return true;
+                          const q = gSearch.toLowerCase();
+                          return s.productName.toLowerCase().includes(q) || (s.factory||"").toLowerCase().includes(q);
+                        })
+                        .map(s => {
+                          const latest  = s.versions[s.versions.length-1];
+                          const sc      = GS_STATUS_COLORS[s.status] || GS_STATUS_COLORS["Awaiting Review"];
+                          const factoryLabel = view==="factory" && s.status==="New Sample Requested" ? "Requires Resubmission" : s.status;
+                          const fsc     = view==="factory" && s.status==="New Sample Requested"
+                            ? { bg:"#FFF3E0", text:"#B45309", dot:"#F97316" } : sc;
+                          const btnLabel = view==="brand" ? (s.status==="Awaiting Review" ? "Review sample" : "Open") : (s.status==="New Sample Requested" ? "Resubmit" : "Open");
+                          const btnDark  = (view==="brand" && s.status==="Awaiting Review") || (view==="factory" && s.status==="New Sample Requested");
+                          const actionDate = latest?.brandDecision?.date || latest?.dateReceived;
+                          const dAgo = relativeDate(actionDate);
+                          const dateLabel = latest?.brandDecision ? (latest.brandDecision.type==="Approved" ? "Approved" : "Reviewed") : "Submitted";
+                          const thumb = latest?.photos?.[0]?.url || latest?.photos?.[0]?.dataUrl || null;
 
                           return (
-                            <div key={p.id} className="prow"
-                              onClick={() => goProd(p.id)}
-                              style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:16, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
-                              {/* Thumbnail */}
-                              <div style={{ width:56, height:56, borderRadius:10, background:"#F3F4F6", flexShrink:0, overflow:"hidden", border:"1px solid #E8EAED", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                                {thumb
-                                  ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
-                                  : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                                }
+                            <div key={s.id} className="prow"
+                              onClick={() => setGSelected(s.id)}
+                              style={{ background:"#fff", border:"1px solid #E8EAED",
+                                borderRadius:14, padding:"14px 18px",
+                                display:"flex", alignItems:"center", gap:14,
+                                boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
+                              <div style={{ width:52, height:52, borderRadius:10, flexShrink:0, overflow:"hidden",
+                                background:"#F3F4F6", border:"1px solid #E8EAED",
+                                display:"flex", alignItems:"center", justifyContent:"center" }}>
+                                {thumb ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                                  : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5">
+                                      <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/>
+                                    </svg>}
                               </div>
-                              {/* Info */}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                                  <span style={{ fontSize:15, fontWeight:700, color:"#0F1117", letterSpacing:"-0.02em" }}>{p.name}</span>
-                                  {factoryLabel && (
-                                    <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:pillStyle.bg, color:pillStyle.text, fontSize:11, fontWeight:600 }}>
-                                      <span style={{ width:5, height:5, borderRadius:"50%", background:pillStyle.dot }} />{factoryLabel}
-                                    </span>
-                                  )}
+                                  <span style={{ fontSize:14, fontWeight:600, color:"#0F1117" }}>{s.productName}</span>
+                                  <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+                                    padding:"2px 8px", borderRadius:20, background:fsc.bg, color:fsc.text, fontSize:11, fontWeight:600 }}>
+                                    <span style={{ width:5, height:5, borderRadius:"50%", background:fsc.dot }} />{factoryLabel}
+                                  </span>
                                 </div>
-                                <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                                  {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
-                                  {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} awaiting brand</span></>}
-                                  {rejected > 0 && pending === 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#F97316", fontWeight:600 }}>{rejected} need{rejected===1?"s":""} resubmission</span></>}
-                                  {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{latestVer?.approvalDate ? "Decided" : "Submitted"} {timeStr}</span></>}
+                                <div style={{ fontSize:12, color:"#8B909A", display:"flex", gap:5, flexWrap:"wrap" }}>
+                                  <span style={{ fontFamily:"monospace", fontSize:11, fontWeight:600, color:"#374151" }}>
+                                    {s.versions.length} version{s.versions.length!==1?"s":""}
+                                  </span>
+                                  {s.factory && <><span style={{ color:"#E5E7EB" }}>·</span><span>{s.factory}</span></>}
+                                  {dAgo && <><span style={{ color:"#E5E7EB" }}>·</span><span>{dateLabel} {dAgo}</span></>}
                                 </div>
                               </div>
-                              {/* Actions */}
                               <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                                <button onClick={e => { e.stopPropagation(); handleDeleteProduct(p.id); }}
-                                  style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6", background:"transparent", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
+                                <button onClick={e => { e.stopPropagation(); handleDeleteGarmentSample(s.id); }}
+                                  style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6",
+                                    background:"transparent", cursor:"pointer", display:"flex",
+                                    alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
                                   onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
                                   onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
-                                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                                 </button>
-                                <button onClick={e => { e.stopPropagation(); goProd(p.id); }}
-                                  style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", ...btnStyle }}>
+                                <button onClick={() => setGSelected(s.id)}
+                                  style={{ display:"flex", alignItems:"center", gap:5,
+                                    padding:"7px 14px", border:"none", borderRadius:8,
+                                    fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                                    background: btnDark ? "#0F1117" : "#F3F4F6",
+                                    color:      btnDark ? "#fff"    : "#374151" }}>
                                   {btnLabel}
                                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                                 </button>
@@ -2443,395 +3063,41 @@ export default function App() {
                             </div>
                           );
                         })}
-                        {addingProduct && (
-                          <div style={{ background:"#fff", border:"1.5px dashed #CBD5E1", borderRadius:14, overflow:"hidden" }}>
-                            <AddRow placeholder="Product name..." onAdd={addProduct} onCancel={() => setAddingProduct(false)} />
-                          </div>
-                        )}
-                      </div>
                     </div>
-                  )}
-
-                  {/* L2: submissions inside a product */}
-                  {curProduct && (
-                    <div>
-                      <div style={{ display:"flex", gap:10, marginBottom:16, alignItems:"center" }}>
-                        <FilterBar />
-                        <button onClick={() => setShowNew(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 16px", background:"#0F1117", color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                          New Submission
-                        </button>
-                      </div>
-                      <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
-                      {scopedMaterials.filter(m => m.materialName!=="__empty__").length === 0 && (
-                        <div style={{ padding:"48px 24px", textAlign:"center", background:"#fff", borderRadius:14, border:"1px solid #E8EAED", marginTop:2 }}>
-                          <div style={{ fontWeight:600, fontSize:14, color:"#9CA3AF" }}>No submissions yet — add the first one</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-            }
-          </>
-        )}
-
-        {/* ---- BRAND VIEW ---- */}
-        {view === "brand" && (
-          <>
-            {!bNav && searchResults === null && (
-              <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.03em", color:"#0F1117", lineHeight:1.1, marginBottom:5 }}>Material Approvals</div>
-                {(() => {
-                  const allReal = materials.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-                  const pending = allReal.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
-                  const prods   = products.filter(p => p.materialIds.some(id => materials.find(m => m.id===id && m.materialName!=="__empty__"))).length;
-                  return <div style={{ fontSize:13, color:"#8B909A", fontWeight:500 }}>{pending} Pending · {prods} Product{prods!==1?"s":""}</div>;
-                })()}
-              </div>
-            )}
-
-            <SearchBar search={search} setSearch={setSearch} placeholder="Search products, materials, suppliers..." />
-
-            {searchResults !== null
-              ? (<div>
-                  <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:12 }}>
-                    {searchResults.length} result{searchResults.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
-                  </div>
-                  <MatTable rows={searchResults} showContext />
-                 </div>)
-              : <>
-                  {!bNav && (
-                    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                      {products.length===0 && (
-                        <div style={{ padding:"64px 24px", textAlign:"center", background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
-                          <div style={{ fontSize:32, marginBottom:10 }}>🎉</div>
-                          <div style={{ fontWeight:700, fontSize:15, color:"#111827" }}>No pending approvals</div>
-                          <div style={{ color:"#9CA3AF", fontSize:13, marginTop:4 }}>Factory teams are clear.</div>
-                        </div>
-                      )}
-                      {products.map(p => {
-                        const mats    = p.materialIds.map(id => materials.find(m => m.id===id)).filter(Boolean);
-                        const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
-                        const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
-                        const approved= real.filter(m => m.versions[m.versions.length-1].status === "Approved").length;
-                        const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
-                        const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
-
-                        // Use approvalDate when available, else submissionDate
-                        const latestMat = real.length > 0 ? real[real.length-1] : null;
-                        const latestVer = latestMat ? latestMat.versions[latestMat.versions.length-1] : null;
-                        const displayDate = latestVer ? (latestVer.approvalDate || latestVer.submissionDate) : null;
-                        const daysAgo = displayDate ? Math.floor((Date.now()-new Date(displayDate))/(1000*60*60*24)) : null;
-                        const timeStr = daysAgo === null ? "" : daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
-
-                        const dominantStatus = pending > 0 ? "Pending" : rejected > 0 ? "Rejected" : approved > 0 ? "Approved" : null;
-                        const sc = STATUS_COLORS[dominantStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
-
-                        // Brand button: "Review" only when there's something pending to approve/reject
-                        const btnLabel = pending > 0 ? "Review" : "Open";
-                        const btnStyle = pending > 0
-                          ? { background:"#0F1117", color:"#fff" }
-                          : { background:"#F3F4F6", color:"#374151" };
-
-                        return (
-                          <div key={p.id} className="prow"
-                            onClick={() => bGoProd(p.id)}
-                            style={{ background:"#fff", border:"1px solid #E8EAED", borderRadius:14, padding:"14px 18px", display:"flex", alignItems:"center", gap:16, boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
-                            <div style={{ width:56, height:56, borderRadius:10, background:"#F3F4F6", flexShrink:0, overflow:"hidden", border:"1px solid #E8EAED", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                              {thumb
-                                ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
-                                : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                              }
-                            </div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                                <span style={{ fontSize:15, fontWeight:700, color:"#0F1117", letterSpacing:"-0.02em" }}>{p.name}</span>
-                                {dominantStatus && (
-                                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text, fontSize:11, fontWeight:600 }}>
-                                    <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />{dominantStatus}
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ fontSize:12.5, color:"#8B909A", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                                {real.length > 0 && <span>{real.length} submission{real.length!==1?"s":""}</span>}
-                                {pending > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span style={{ color:"#D97706", fontWeight:600 }}>{pending} to review</span></>}
-                                {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{latestVer?.approvalDate ? "Decided" : "Submitted"} {timeStr}</span></>}
-                              </div>
-                            </div>
-                            <div style={{ flexShrink:0 }}>
-                              <button onClick={e => { e.stopPropagation(); bGoProd(p.id); }}
-                                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"none", borderRadius:8, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", ...btnStyle }}>
-                                {btnLabel}
-                                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {curBProduct && (
-                    <div>
-                      <div style={{ display:"flex", gap:7, marginBottom:14 }}><FilterBar /></div>
-                      <MatTable rows={scopedMaterials.filter(m => m.materialName!=="__empty__" && m.versions.length > 0).map(m => ({ ...m, latest:m.versions[m.versions.length-1] }))} />
-                    </div>
-                  )}
-                </>
-            }
-          </>
-        )}
-        </>)}{/* end materials section */}
-
-      </div>
-
-      {selectedMaterial && (
-        <DetailModal material={selectedMaterial} view={view}
-          onClose={() => setSelected(null)}
-          onApprove={handleApprove} onReject={handleReject}
-          brandComment={brandComment} setBrandComment={setBrandComment}
-          setMaterials={setMaterials}
-          onSubmitNewVersion={handleNewVersion}
-          showNewVersionFor={showNewVersionFor} setShowNewVersionFor={setShowNewVersionFor}
-        />
-      )}
-
-        {/* ===== GARMENT SAMPLES SECTION ===== */}
-        {section === "samples" && (
-          <>
-            {gLoading ? (
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                padding:60, color:"#9CA3AF", gap:10 }}>
-                <Spinner /> Loading samples...
-              </div>
-            ) : gSelectedSample ? (
-              <GsDetail
-                key={gSelectedSample.id}
-                sample={gSelectedSample}
-                view={view}
-                onBack={() => setGSelected(null)}
-                onDecide={handleGsDecide}
-                onSubmitVersion={handleGsNewVersion}
-              />
-            ) : (
-              <>
-                {/* Dashboard header */}
-                <div style={{ display:"flex", alignItems:"flex-start",
-                  justifyContent:"space-between", marginBottom:24 }}>
-                  <div>
-                    <div style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.03em",
-                      color:"#0F1117", lineHeight:1.1 }}>Garment Samples</div>
-                    <div style={{ fontSize:13, color:"#8B909A", marginTop:5, fontWeight:500 }}>
-                      {gSamples.filter(s=>s.status==="Awaiting Review").length} to review
-                      {" · "}{gSamples.length} total
-                    </div>
-                  </div>
-                  {view === "factory" && (
-                    <button onClick={() => setShowNewGs(true)}
-                      style={{ display:"flex", alignItems:"center", gap:6,
-                        padding:"8px 15px", background:"#0F1117", color:"#fff",
-                        border:"none", borderRadius:7, fontSize:13, fontWeight:600,
-                        cursor:"pointer", fontFamily:"inherit" }}>
-                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" strokeWidth="2.8">
-                        <line x1="12" y1="5" x2="12" y2="19"/>
-                        <line x1="5" y1="12" x2="19" y2="12"/>
-                      </svg>
-                      Submit sample
-                    </button>
                   )}
                 </div>
-
-                {/* Search */}
-                <SearchBar search={gSearch} setSearch={setGSearch}
-                  placeholder="Search samples, products, factories..." />
-
-                {/* Sample cards */}
-                {gSamples.length === 0 ? (
-                  <div style={{ padding:"64px 24px", textAlign:"center",
-                    background:"#fff", borderRadius:16, border:"1px solid #E8EAED" }}>
-                    <div style={{ fontSize:32, marginBottom:10 }}>👕</div>
-                    <div style={{ fontWeight:700, fontSize:15, color:"#111827", marginBottom:6 }}>
-                      No garment samples yet
-                    </div>
-                    <div style={{ color:"#9CA3AF", fontSize:13 }}>
-                      {view==="factory"
-                        ? "Submit your first sample to get started"
-                        : "No samples awaiting review"}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                    {gSamples
-                      .filter(s => {
-                        if (!gSearch.trim()) return true;
-                        const q = gSearch.toLowerCase();
-                        return s.productName.toLowerCase().includes(q)
-                          || (s.factory||"").toLowerCase().includes(q)
-                          || s.status.toLowerCase().includes(q);
-                      })
-                      .map(s => {
-                        const latest = s.versions[s.versions.length-1];
-                        const sc = GS_STATUS_COLORS[s.status] || GS_STATUS_COLORS["Awaiting Review"];
-                        const factoryLabel = view==="factory" && s.status==="New Sample Requested"
-                          ? "Requires Resubmission" : s.status;
-                        const fsc = view==="factory" && s.status==="New Sample Requested"
-                          ? { bg:"#FFF3E0", text:"#B45309", dot:"#F97316" } : sc;
-
-                        // Action button logic
-                        const btnLabel = view==="brand"
-                          ? (s.status==="Awaiting Review" ? "Review sample" : "Open")
-                          : (s.status==="New Sample Requested" ? "Resubmit" : "Open");
-                        const btnDark = (view==="brand" && s.status==="Awaiting Review")
-                          || (view==="factory" && s.status==="New Sample Requested");
-
-                        // Date display
-                        const actionDate = latest?.brandDecision?.date || latest?.dateReceived;
-                        const dAgo = actionDate ? (() => {
-                          const d = Math.floor((Date.now()-new Date(actionDate))/(1000*60*60*24));
-                          if (d===0) return "Today"; if (d===1) return "Yesterday"; return `${d}d ago`;
-                        })() : "";
-                        const dateLabel = latest?.brandDecision
-                          ? (latest.brandDecision.type==="Approved" ? "Approved" :
-                             latest.brandDecision.type==="New Sample Requested" ? "Requested" : "Reviewed")
-                          : "Submitted";
-
-                        // Thumb from first photo of latest version
-                        const thumb = latest?.photos?.[0]?.url || latest?.photos?.[0]?.dataUrl || null;
-
-                        return (
-                          <div key={s.id} className="scard"
-                            onClick={() => setGSelected(s.id)}
-                            style={{ background:"#fff", border:"1px solid #E8EAED",
-                              borderRadius:14, padding:"14px 18px",
-                              display:"flex", alignItems:"center", gap:16,
-                              boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
-
-                            {/* Thumbnail */}
-                            <div style={{ width:56, height:56, borderRadius:10,
-                              background:"#F3F4F6", flexShrink:0, overflow:"hidden",
-                              border:"1px solid #E8EAED", display:"flex",
-                              alignItems:"center", justifyContent:"center" }}>
-                              {thumb
-                                ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
-                                : <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5">
-                                    <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/>
-                                  </svg>
-                              }
-                            </div>
-
-                            {/* Info */}
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ display:"flex", alignItems:"center",
-                                gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                                <span style={{ fontSize:15, fontWeight:700, color:"#0F1117",
-                                  letterSpacing:"-0.02em" }}>{s.productName}</span>
-                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
-                                  padding:"2px 8px", borderRadius:20, background:fsc.bg,
-                                  color:fsc.text, fontSize:11, fontWeight:600 }}>
-                                  <span style={{ width:5, height:5, borderRadius:"50%", background:fsc.dot }} />
-                                  {factoryLabel}
-                                </span>
-                              </div>
-                              <div style={{ fontSize:12.5, color:"#8B909A",
-                                display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
-                                <span style={{ fontFamily:"monospace", fontSize:11,
-                                  fontWeight:600, color:"#374151" }}>
-                                  {s.versions.length} version{s.versions.length!==1?"s":""}
-                                </span>
-                                {s.factory && <>
-                                  <span style={{ color:"#E5E7EB" }}>·</span>
-                                  <span>{s.factory}</span>
-                                </>}
-                                {dAgo && <>
-                                  <span style={{ color:"#E5E7EB" }}>·</span>
-                                  <span>{dateLabel} {dAgo}</span>
-                                </>}
-                              </div>
-                            </div>
-
-                            {/* Button */}
-                            <div onClick={e => e.stopPropagation()} style={{ flexShrink:0 }}>
-                              <button onClick={() => setGSelected(s.id)}
-                                style={{ display:"flex", alignItems:"center", gap:5,
-                                  padding:"7px 14px", border:"none", borderRadius:8,
-                                  fontSize:12.5, fontWeight:600, cursor:"pointer",
-                                  fontFamily:"inherit",
-                                  background: btnDark ? "#0F1117" : "#F3F4F6",
-                                  color: btnDark ? "#fff" : "#374151" }}>
-                                {btnLabel}
-                                <svg width={11} height={11} viewBox="0 0 24 24" fill="none"
-                                  stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="9 18 15 12 9 6"/>
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    }
-                  </div>
-                )}
-              </>
-            )}
-          </>
+              );
+            })()}
+          </div>
         )}
 
-        </div>{/* end maxWidth */}
-        </div>{/* end main content */}
+        </div>{/* end main scrollable */}
+        </ErrorBoundary>
+      </div>{/* end body flex */}
 
       {showNew && (
         <NewSubmissionModal onClose={() => setShowNew(false)} onSubmit={addMaterial}
-          existingStyles={allStyles} existingMaterials={scopedMaterials} />
+          existingStyles={allStyles}
+          existingMaterials={activeProduct
+            ? materials.filter(m => activeProduct.materialIds.includes(m.id) && m.materialName !== "__empty__")
+            : materials.filter(m => m.materialName !== "__empty__")} />
       )}
 
       {showNewGs && (
         <GsNewSampleModal
           existingProductNames={products.map(p => p.name)}
+          defaultProductName={activeProduct?.name || ""}
           onClose={() => setShowNewGs(false)}
           onSubmit={async data => { await handleGsSubmit(data); setShowNewGs(false); }}
         />
       )}
 
-      {/* ===== BOTTOM VIEW TOGGLE (hidden — toggle moved to navbar) ===== */}
-      <div style={{ display:"none" }}>
-        <div>
-          {[
-            { v:"factory", icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="2 20 2 10 8 6 8 10 14 6 14 10 20 6 22 6 22 20"/></svg>, label:"Factory" },
-            { v:"brand",   icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>, label:"Brand" },
-          ].map(({ v, icon, label }) => (
-            <button key={v}
-              onClick={() => { setView(v); setNav(null); setBNav(null); setSearch(""); }}
-              style={{
-                display:"flex", alignItems:"center", gap:6,
-                padding:"8px 18px", borderRadius:36, border:"none", cursor:"pointer",
-                fontFamily:"inherit", fontSize:12.5, fontWeight:600,
-                background: view===v ? "#fff" : "transparent",
-                color: view===v ? "#111827" : "rgba(255,255,255,0.45)",
-                transition:"all 0.15s cubic-bezier(0.34,1.56,0.64,1)",
-              }}>
-              {icon}{label}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Bottom padding so content doesn't hide behind toggle */}
-      <div style={{ height:80 }} />
+
+
     </div>
   );
 }
 
-
-
-function SearchResults({ results, search }) {
-  return (
-    <div>
-      <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:10 }}>
-        {results.length} result{results.length!==1?"s":""} for <span style={{ fontWeight:600, color:"#374151" }}>"{search}"</span>
-      </div>
-    </div>
-  );
-}
 
 
