@@ -1806,7 +1806,6 @@ export default function App() {
     setGSelected(null);
   }
 
-  const activeProduct = activeTab ? products.find(p => p.id === activeTab) : null;
   const activeTabSection = activeTab ? (tabSection[activeTab] || "materials") : "materials";
 
   // ---- garment sample mutators ----
@@ -2080,6 +2079,8 @@ export default function App() {
     });
     return Object.values(map);
   }, [materials]);
+
+  const activeProduct = activeTab ? products.find(p => p.id === activeTab) : null;
 
   //  derived nav objects 
   // Factory: nav is the product name string (used as id)
