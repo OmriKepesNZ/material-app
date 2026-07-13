@@ -1810,7 +1810,6 @@ export default function App() {
   function setTabSectionForActive(sec) {
     if (!activeTab) return;
     setTabSection(s => ({ ...s, [activeTab]: sec }));
-    setGSelected(null);
   }
 
   const activeTabSection = activeTab ? (tabSection[activeTab] || "samples") : "samples";
@@ -2856,9 +2855,14 @@ This cannot be undone.`;
         )}
 
         {/* ── PRODUCT TAB: active product open ── */}
-        {activeTab && activeProduct && (
+        {activeTab && activeProduct && (() => {
+          const materialDetailOpen = activeTabSection === "materials" && selectedMaterial && activeProduct.materialIds.includes(selectedMaterial.id);
+          const sampleDetailOpen   = activeTabSection === "samples" && gSelectedSample && gSelectedSample.productName === activeProduct.name;
+          const detailOpen = materialDetailOpen || sampleDetailOpen;
+          return (
           <div style={{ maxWidth:900 }}>
-            {/* Product header */}
+            {/* Product header — hidden while viewing a material/sample detail, which has its own back nav */}
+            {!detailOpen && (
             <div style={{ marginBottom:20 }}>
               <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
                 <button onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}
@@ -2882,7 +2886,7 @@ This cannot be undone.`;
                 ].map(s => {
                   const activeTab_ = activeTabSection === s.key;
                   return (
-                    <button key={s.key} onClick={() => { setTabSectionForActive(s.key); setSelected(null); setGSelected(null); }}
+                    <button key={s.key} onClick={() => setTabSectionForActive(s.key)}
                       style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
                         borderRadius:8, border: activeTab_ ? "1px solid #111827" : "1px solid transparent",
                         cursor:"pointer", fontFamily:"inherit",
@@ -2899,6 +2903,7 @@ This cannot be undone.`;
                 })}
               </div>
             </div>
+            )}
 
             {/* ── MATERIALS inside product ── */}
             {activeTabSection === "materials" && (() => {
@@ -3081,7 +3086,8 @@ This cannot be undone.`;
               );
             })()}
           </div>
-        )}
+          );
+        })()}
 
         </div>{/* end main scrollable */}
         </ErrorBoundary>
