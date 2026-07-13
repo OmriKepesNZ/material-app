@@ -2864,24 +2864,32 @@ This cannot be undone.`;
                 <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{activeProduct.name}</span>
               </div>
 
-              {/* Section toggle: Materials / Garment Samples */}
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              {/* Section toggle: Garment Samples / Materials */}
+              <div style={{ display:"flex", alignItems:"center", gap:2, padding:3,
+                background:"#EEF0F3", borderRadius:11, border:"1px solid #E5E7EB" }}>
                 {[
-                  { key:"materials", label:"Materials",
-                    icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
                   { key:"samples",   label:"Garment Samples",
                     icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
-                ].map(s => (
-                  <button key={s.key} onClick={() => { setTabSectionForActive(s.key); setSelected(null); setGSelected(null); }}
-                    style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
-                      borderRadius:8, border:"none", cursor:"pointer", fontFamily:"inherit",
-                      fontSize:13, fontWeight:600,
-                      background: activeTabSection===s.key ? "#111827" : "#F3F4F6",
-                      color:      activeTabSection===s.key ? "#fff"    : "#6B7280",
-                      transition:"all 0.12s" }}>
-                    {s.icon} {s.label}
-                  </button>
-                ))}
+                  { key:"materials", label:"Materials",
+                    icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
+                ].map(s => {
+                  const activeTab_ = activeTabSection === s.key;
+                  return (
+                    <button key={s.key} onClick={() => { setTabSectionForActive(s.key); setSelected(null); setGSelected(null); }}
+                      style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+                        borderRadius:8, border: activeTab_ ? "1px solid #111827" : "1px solid transparent",
+                        cursor:"pointer", fontFamily:"inherit",
+                        fontSize:13, fontWeight: activeTab_ ? 700 : 500,
+                        background: activeTab_ ? "#111827" : "transparent",
+                        color:      activeTab_ ? "#fff"    : "#9CA3AF",
+                        boxShadow:  activeTab_ ? "0 1px 3px rgba(0,0,0,0.15)" : "none",
+                        transition:"all 0.12s" }}
+                      onMouseEnter={e => { if (!activeTab_) e.currentTarget.style.color = "#374151"; }}
+                      onMouseLeave={e => { if (!activeTab_) e.currentTarget.style.color = "#9CA3AF"; }}>
+                      {s.icon} {s.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
