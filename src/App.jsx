@@ -2176,8 +2176,9 @@ export default function App() {
 
   // Add a new submission: creates Airtable Materials + Submissions records
   async function addMaterial(data) {
-    const productName       = curProduct?.name || "Unknown";
-    const airtableProductId = curProduct?.airtableProductId || null;
+    const targetProduct     = activeProduct || curProduct;
+    const productName       = targetProduct?.name || "Unknown";
+    const airtableProductId = targetProduct?.airtableProductId || null;
 
     try {
       // 1. Create Material in Airtable FIRST (never blocked by image upload)
@@ -2210,7 +2211,7 @@ export default function App() {
         airtableId:        createdMat.id,
         airtableProductId: airtableProductId,
         styleName:         productName,
-        brand:             curProduct?.brand  || "",
+        brand:             targetProduct?.brand  || "",
         season:            data.season        || "",
         factoryName:       data.factoryName   || "",
         materialType:      data.materialType,
