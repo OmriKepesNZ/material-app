@@ -478,6 +478,75 @@ function NewSubmissionModal({ onClose, onSubmit, existingStyles, existingMateria
 }
 
 // ─── Material Detail — full-page view (replaces popup modal) ─────────────────
+// --- Version dropdown — shared by MaterialDetail and GsDetail --------------------
+function VersionDropdown({ versions, activeIdx, onSelect, labelFor, dateFor, dotFor }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+  useEffect(() => {
+    function onDocClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const lastIdx = versions.length - 1;
+  const active = versions[activeIdx];
+  const isCurrent = activeIdx === lastIdx;
+
+  return (
+    <div ref={ref} style={{ position:"relative", marginBottom:16 }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display:"flex", alignItems:"center", gap:9, padding:"8px 12px",
+          borderRadius:10, cursor:"pointer", background:"#fff",
+          border:"1.5px solid #E5E7EB", fontFamily:"inherit", minWidth:230,
+          justifyContent:"space-between" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ width:6, height:6, borderRadius:"50%", background:dotFor(active), flexShrink:0 }} />
+          <span style={{ fontSize:13, fontWeight:700, color:"#111827", fontFamily:"monospace" }}>{labelFor(active)}</span>
+          <span style={{ fontSize:12, color:"#9CA3AF" }}>{dateFor(active)}</span>
+          {isCurrent
+            ? <span style={{ fontSize:10, fontWeight:700, color:"#065F46", background:"#ECFDF5",
+                padding:"2px 7px", borderRadius:10, textTransform:"uppercase", letterSpacing:"0.04em" }}>Current</span>
+            : <span style={{ fontSize:10, fontWeight:600, color:"#B45309", background:"#FFF8E6",
+                padding:"2px 7px", borderRadius:10, textTransform:"uppercase", letterSpacing:"0.04em" }}>Past version</span>
+          }
+        </div>
+        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2.2"
+          style={{ transform: open?"rotate(180deg)":"none", transition:"transform 0.15s", flexShrink:0 }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:20,
+          background:"#fff", border:"1px solid #E5E7EB", borderRadius:10,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.1)", minWidth:260, overflow:"hidden", padding:4 }}>
+          {[...versions].reverse().map((ver, ri) => {
+            const idx = lastIdx - ri;
+            const isAct = idx === activeIdx;
+            const isCur = idx === lastIdx;
+            return (
+              <div key={idx} onClick={() => { onSelect(idx); setOpen(false); }}
+                style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
+                  padding:"9px 11px", borderRadius:7, cursor:"pointer",
+                  background: isAct ? "#F3F4F6" : "transparent" }}
+                onMouseEnter={e => { if (!isAct) e.currentTarget.style.background = "#FAFAFA"; }}
+                onMouseLeave={e => { if (!isAct) e.currentTarget.style.background = "transparent"; }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ width:6, height:6, borderRadius:"50%", background:dotFor(ver), flexShrink:0 }} />
+                  <span style={{ fontSize:13, fontWeight:700, color:"#111827", fontFamily:"monospace" }}>{labelFor(ver)}</span>
+                  <span style={{ fontSize:12, color:"#9CA3AF" }}>{dateFor(ver)}</span>
+                </div>
+                {isCur && <span style={{ fontSize:9.5, fontWeight:700, color:"#065F46", background:"#ECFDF5",
+                  padding:"2px 6px", borderRadius:10, textTransform:"uppercase", letterSpacing:"0.04em", flexShrink:0 }}>Current</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MaterialDetail({ material, view, onClose, onApprove, onReject,
   brandComment, setBrandComment, setMaterials, onSubmitNewVersion,
   showNewVersionFor, setShowNewVersionFor }) {
@@ -535,31 +604,16 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
         </div>
       </div>
 
-      {/* Version strip — compact horizontal timeline, always visible near the top */}
+      {/* Version selector */}
       {material.versions.length > 1 && (
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:16,
-          overflowX:"auto", paddingBottom:2 }}>
-          <span style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-            letterSpacing:"0.06em", flexShrink:0, marginRight:2 }}>Versions</span>
-          {[...material.versions].reverse().map((ver,ri)=>{
-            const idx=material.versions.length-1-ri;
-            const isAct=idx===activeVersionIdx;
-            return (
-              <button key={ver.version} onClick={()=>{setActiveVersionIdx(idx);setEditShipment(false);}}
-                style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0,
-                  padding:"6px 11px", borderRadius:20, cursor:"pointer",
-                  background: isAct ? "#111827" : "#F3F4F6",
-                  border: isAct ? "1px solid #111827" : "1px solid transparent",
-                  fontFamily:"inherit", transition:"all 0.1s" }}>
-                <span style={{ fontSize:12, fontWeight:700,
-                  color:isAct?"#fff":"#374151", fontFamily:"monospace" }}>V{ver.version}</span>
-                <span style={{ fontSize:11, color:isAct?"rgba(255,255,255,0.65)":"#9CA3AF" }}>{formatDate(ver.submissionDate)}</span>
-                <span style={{ width:5, height:5, borderRadius:"50%",
-                  background: (STATUS_COLORS[ver.status]||{}).dot || "#9CA3AF" }} />
-              </button>
-            );
-          })}
-        </div>
+        <VersionDropdown
+          versions={material.versions}
+          activeIdx={activeVersionIdx}
+          onSelect={idx => { setActiveVersionIdx(idx); setEditShipment(false); }}
+          labelFor={ver => `V${ver.version}`}
+          dateFor={ver => formatDate(ver.submissionDate)}
+          dotFor={ver => (STATUS_COLORS[ver.status]||{}).dot || "#9CA3AF"}
+        />
       )}
       {!isLatest && (
         <div style={{ fontSize:11.5, color:"#B45309", background:"#FFF8E6", border:"1px solid #FDE9C3",
@@ -1542,31 +1596,16 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
         </div>
       </div>
 
-      {/* Version strip — compact horizontal timeline, always visible near the top */}
+      {/* Version selector */}
       {sample.versions.length > 1 && (
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:16,
-          overflowX:"auto", paddingBottom:2 }}>
-          <span style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
-            letterSpacing:"0.06em", flexShrink:0, marginRight:2 }}>Versions</span>
-          {[...sample.versions].reverse().map((v,ri) => {
-            const idx = sample.versions.length-1-ri;
-            const isAct = idx===activeIdx;
-            return (
-              <button key={v.versionNum} onClick={()=>setActiveIdx(idx)}
-                style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0,
-                  padding:"6px 11px", borderRadius:20, cursor:"pointer",
-                  background: isAct ? "#111827" : "#F3F4F6",
-                  border: isAct ? "1px solid #111827" : "1px solid transparent",
-                  fontFamily:"inherit", transition:"all 0.1s" }}>
-                <span style={{ fontSize:12, fontWeight:700,
-                  color:isAct?"#fff":"#374151", fontFamily:"monospace" }}>V{v.versionNum}</span>
-                <span style={{ fontSize:11, color:isAct?"rgba(255,255,255,0.65)":"#9CA3AF" }}>{formatDate(v.dateReceived)}</span>
-                <span style={{ width:5, height:5, borderRadius:"50%",
-                  background: (GS_STATUS_COLORS[v.status]||{}).dot || "#9CA3AF" }} />
-              </button>
-            );
-          })}
-        </div>
+        <VersionDropdown
+          versions={sample.versions}
+          activeIdx={activeIdx}
+          onSelect={idx => setActiveIdx(idx)}
+          labelFor={v => `V${v.versionNum}`}
+          dateFor={v => formatDate(v.dateReceived)}
+          dotFor={v => (GS_STATUS_COLORS[v.status]||{}).dot || "#9CA3AF"}
+        />
       )}
       {!isLatest && (
         <div style={{ fontSize:11.5, color:"#B45309", background:"#FFF8E6", border:"1px solid #FDE9C3",
