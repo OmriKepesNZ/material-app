@@ -2794,10 +2794,24 @@ This cannot be undone.`;
                       const real    = mats.filter(m => m.materialName !== "__empty__" && m.versions.length > 0);
                       const pending = real.filter(m => m.versions[m.versions.length-1].status === "Pending").length;
                       const rejected= real.filter(m => m.versions[m.versions.length-1].status === "Rejected").length;
-                      const thumb   = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
                       const latestVer = real.length > 0 ? real[real.length-1].versions[real[real.length-1].versions.length-1] : null;
                       const displayDate = latestVer ? (latestVer.approvalDate || latestVer.submissionDate) : null;
                       const timeStr = relativeDate(displayDate);
+
+                      // Garment sample counts for this product
+                      const gs = gSamples.filter(s => s.productName === p.name);
+                      const gsPending = gs.filter(s => s.status === "Awaiting Review").length;
+
+                      // Thumbnail — prefer the most recently submitted garment sample photo,
+                      // fall back to the most recent raw material photo if no garment sample photo exists
+                      const latestGsPhoto = gs
+                        .map(s => s.versions[s.versions.length-1])
+                        .filter(v => v && v.photos && v.photos.length > 0)
+                        .sort((a,b) => new Date(b.dateReceived||0) - new Date(a.dateReceived||0))[0]
+                        ?.photos[0];
+                      const gsThumb = latestGsPhoto ? (latestGsPhoto.url || latestGsPhoto.dataUrl) : null;
+                      const matThumb = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
+                      const thumb = gsThumb || matThumb;
 
                       // Overall product status
                       const hasPending  = pending > 0;
@@ -2807,10 +2821,6 @@ This cannot be undone.`;
                         : real.length > 0 && real.every(m => m.versions[m.versions.length-1].status === "Approved") ? "Approved"
                         : real.length === 0 ? "No submissions" : "Mixed";
                       const sc = STATUS_COLORS[overallStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
-
-                      // Garment sample counts for this product
-                      const gs = gSamples.filter(s => s.productName === p.name);
-                      const gsPending = gs.filter(s => s.status === "Awaiting Review").length;
 
                       return (
                         <div key={p.id} className="prow"
