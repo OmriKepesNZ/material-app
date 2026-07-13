@@ -519,7 +519,7 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
   return (
     <div>
       {/* Breadcrumb header */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <button onClick={onClose}
             style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
@@ -527,19 +527,46 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
             {ICO.back()} Back
           </button>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-          <span style={{ fontSize:13, color:"#6B7280" }}>{material.styleName}</span>
-          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
           <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{material.materialName}</span>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ padding:"2px 8px", background:isLatest?"#111827":"#F3F4F6",
-            borderRadius:4, fontSize:11, fontWeight:700,
-            color:isLatest?"#fff":"#374151", fontFamily:"monospace" }}>V{v.version}</span>
           <Badge status={v.status} />
           <Badge status={v.shipmentStatus} type="shipment" />
-          {!isLatest && <span style={{ fontSize:11, color:"#9CA3AF", fontStyle:"italic" }}>historical view</span>}
         </div>
       </div>
+
+      {/* Version strip — compact horizontal timeline, always visible near the top */}
+      {material.versions.length > 1 && (
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:16,
+          overflowX:"auto", paddingBottom:2 }}>
+          <span style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+            letterSpacing:"0.06em", flexShrink:0, marginRight:2 }}>Versions</span>
+          {[...material.versions].reverse().map((ver,ri)=>{
+            const idx=material.versions.length-1-ri;
+            const isAct=idx===activeVersionIdx;
+            return (
+              <button key={ver.version} onClick={()=>{setActiveVersionIdx(idx);setEditShipment(false);}}
+                style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0,
+                  padding:"6px 11px", borderRadius:20, cursor:"pointer",
+                  background: isAct ? "#111827" : "#F3F4F6",
+                  border: isAct ? "1px solid #111827" : "1px solid transparent",
+                  fontFamily:"inherit", transition:"all 0.1s" }}>
+                <span style={{ fontSize:12, fontWeight:700,
+                  color:isAct?"#fff":"#374151", fontFamily:"monospace" }}>V{ver.version}</span>
+                <span style={{ fontSize:11, color:isAct?"rgba(255,255,255,0.65)":"#9CA3AF" }}>{formatDate(ver.submissionDate)}</span>
+                <span style={{ width:5, height:5, borderRadius:"50%",
+                  background: (STATUS_COLORS[ver.status]||{}).dot || "#9CA3AF" }} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {!isLatest && (
+        <div style={{ fontSize:11.5, color:"#B45309", background:"#FFF8E6", border:"1px solid #FDE9C3",
+          borderRadius:7, padding:"6px 10px", marginBottom:14, display:"inline-block" }}>
+          Viewing V{v.version} — an earlier version, not the latest submission
+        </div>
+      )}
 
       {/* Two-column body */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, alignItems:"start" }}>
@@ -603,30 +630,6 @@ function MaterialDetail({ material, view, onClose, onApprove, onReject,
               </div>
             )}
           </div>
-
-          {material.versions.length > 1 && (
-            <div style={card}>
-              <div style={{ fontSize:11,fontWeight:600,color:"#9CA3AF",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10 }}>Version history</div>
-              {[...material.versions].reverse().map((ver,ri)=>{
-                const idx=material.versions.length-1-ri;
-                const isAct=idx===activeVersionIdx;
-                return (
-                  <div key={ver.version} onClick={()=>{setActiveVersionIdx(idx);setEditShipment(false);}}
-                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                      padding:"9px 12px", borderRadius:8, cursor:"pointer", marginBottom:2,
-                      background: isAct ? "#111827" : "#F9FAFB",
-                      border: isAct ? "1px solid #111827" : "1px solid #F3F4F6",
-                      transition:"all 0.1s" }}>
-                    <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                      <span style={{ fontSize:12,fontWeight:isAct?700:500,color:isAct?"#fff":"#374151",fontFamily:"monospace" }}>V{ver.version}</span>
-                      <span style={{ fontSize:12,color:isAct?"rgba(255,255,255,0.6)":"#9CA3AF" }}>{ver.submissionDate}</span>
-                    </div>
-                    <Badge status={ver.status} />
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         {/* RIGHT */}
@@ -1514,8 +1517,8 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
 
   return (
     <div>
-      {/* Breadcrumb header — matches MaterialDetail exactly */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+      {/* Breadcrumb header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <button onClick={onBack}
             style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
@@ -1527,13 +1530,7 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
           <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{sample.productName}</span>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ padding:"2px 8px", background:isLatest?"#111827":"#F3F4F6",
-            borderRadius:4, fontSize:11, fontWeight:700,
-            color:isLatest?"#fff":"#374151", fontFamily:"monospace" }}>
-            Proto {ver.versionNum}
-          </span>
           <GsBadge status={ver.status}/>
-          {!isLatest&&<span style={{fontSize:11,color:"#9CA3AF",fontStyle:"italic"}}>historical</span>}
           {view==="brand"&&isLatest&&!d&&(
             <button onClick={()=>setShowReview(true)}
               style={{padding:"7px 14px",background:"#0F1117",color:"#fff",
@@ -1544,6 +1541,39 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
           )}
         </div>
       </div>
+
+      {/* Version strip — compact horizontal timeline, always visible near the top */}
+      {sample.versions.length > 1 && (
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:16,
+          overflowX:"auto", paddingBottom:2 }}>
+          <span style={{ fontSize:10, fontWeight:700, color:"#9CA3AF", textTransform:"uppercase",
+            letterSpacing:"0.06em", flexShrink:0, marginRight:2 }}>Versions</span>
+          {[...sample.versions].reverse().map((v,ri) => {
+            const idx = sample.versions.length-1-ri;
+            const isAct = idx===activeIdx;
+            return (
+              <button key={v.versionNum} onClick={()=>setActiveIdx(idx)}
+                style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0,
+                  padding:"6px 11px", borderRadius:20, cursor:"pointer",
+                  background: isAct ? "#111827" : "#F3F4F6",
+                  border: isAct ? "1px solid #111827" : "1px solid transparent",
+                  fontFamily:"inherit", transition:"all 0.1s" }}>
+                <span style={{ fontSize:12, fontWeight:700,
+                  color:isAct?"#fff":"#374151", fontFamily:"monospace" }}>V{v.versionNum}</span>
+                <span style={{ fontSize:11, color:isAct?"rgba(255,255,255,0.65)":"#9CA3AF" }}>{formatDate(v.dateReceived)}</span>
+                <span style={{ width:5, height:5, borderRadius:"50%",
+                  background: (GS_STATUS_COLORS[v.status]||{}).dot || "#9CA3AF" }} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {!isLatest && (
+        <div style={{ fontSize:11.5, color:"#B45309", background:"#FFF8E6", border:"1px solid #FDE9C3",
+          borderRadius:7, padding:"6px 10px", marginBottom:14, display:"inline-block" }}>
+          Viewing Proto {ver.versionNum} — an earlier version, not the latest submission
+        </div>
+      )}
 
       {/* Two-column body — matches MaterialDetail layout */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, alignItems:"start" }}>
@@ -1621,7 +1651,7 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
           </div>
         </div>
 
-        {/* Right: notes + decision + actions + version history */}
+        {/* Right: notes + decision + actions */}
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           {ver.factoryNotes&&(
             <div style={card}>
@@ -1682,37 +1712,6 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
                 borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
               + Submit Version {ver.versionNum+1}
             </button>
-          )}
-
-          {/* Version history */}
-          {sample.versions.length>0&&(
-            <div style={{ padding:"12px 14px", background:"#F9FAFB", borderRadius:8, border:"1px solid #F3F4F6" }}>
-              <div style={{ fontSize:10, fontWeight:700, color:"#9CA3AF",
-                textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:8 }}>Version history</div>
-              {[...sample.versions].reverse().map((v,ri) => {
-                const idx = sample.versions.length-1-ri;
-                const isAct = idx===activeIdx;
-                return (
-                  <div key={v.versionNum} onClick={()=>setActiveIdx(idx)}
-                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                      padding:"9px 12px", borderRadius:8, cursor:"pointer", marginBottom:2,
-                      background: isAct ? "#111827" : "#fff",
-                      border: isAct ? "1px solid #111827" : "1px solid #F3F4F6",
-                      transition:"all 0.1s" }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <span style={{ fontSize:12, fontWeight:isAct?700:500,
-                        color:isAct?"#fff":"#374151", fontFamily:"monospace" }}>
-                        V{v.versionNum}
-                      </span>
-                      <span style={{ fontSize:12, color:isAct?"rgba(255,255,255,0.55)":"#9CA3AF" }}>
-                        {formatDate(v.dateReceived)}
-                      </span>
-                    </div>
-                    <GsBadge status={v.status}/>
-                  </div>
-                );
-              })}
-            </div>
           )}
         </div>
       </div>
