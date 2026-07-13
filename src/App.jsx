@@ -958,19 +958,28 @@ function GsNewSampleModal({ onClose, onSubmit, existingProductNames, defaultProd
           <div style={{ padding:"0 24px 24px", display:"flex", flexDirection:"column", gap:14 }}>
             <div>
               <div style={{ fontSize:11, fontWeight:600, color:"#9CA3AF", textTransform:"uppercase",
-                letterSpacing:"0.06em", marginBottom:6 }}>Product name</div>
-              <input list="gs-products" value={productName}
-                onChange={e => setProductName(e.target.value)}
-                placeholder="Type a product or select existing..."
-                style={inp} />
-              <datalist id="gs-products">
-                {existingProductNames.map(n => <option key={n} value={n} />)}
-              </datalist>
-              {productName.trim().length > 1 && (
-                <div style={{ fontSize:11, marginTop:4,
-                  color: isMatch ? "#10B981" : "#6366F1" }}>
-                  {isMatch ? "✓ Adding version to existing product" : "+ Will create new product"}
+                letterSpacing:"0.06em", marginBottom:6 }}>Product</div>
+              {defaultProductName ? (
+                <div style={{ ...inp, display:"flex", alignItems:"center", gap:8,
+                  background:"#F9FAFB", color:"#111827", fontWeight:600, cursor:"default" }}>
+                  {productName}
                 </div>
+              ) : (
+                <>
+                  <input list="gs-products" value={productName}
+                    onChange={e => setProductName(e.target.value)}
+                    placeholder="Type a product or select existing..."
+                    style={inp} />
+                  <datalist id="gs-products">
+                    {existingProductNames.map(n => <option key={n} value={n} />)}
+                  </datalist>
+                  {productName.trim().length > 1 && (
+                    <div style={{ fontSize:11, marginTop:4,
+                      color: isMatch ? "#10B981" : "#6366F1" }}>
+                      {isMatch ? "✓ Adding version to existing product" : "+ Will create new product"}
+                    </div>
+                  )}
+                </>
               )}
             </div>
             <div>
@@ -1515,8 +1524,6 @@ function GsDetail({ sample, view, onBack, onDecide, onSubmitVersion }) {
             Back
           </button>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-          <span style={{ fontSize:13, color:"#6B7280" }}>Garment Samples</span>
-          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
           <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{sample.productName}</span>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -1806,7 +1813,7 @@ export default function App() {
     setGSelected(null);
   }
 
-  const activeTabSection = activeTab ? (tabSection[activeTab] || "materials") : "materials";
+  const activeTabSection = activeTab ? (tabSection[activeTab] || "samples") : "samples";
 
   // ---- garment sample mutators ----
   async function handleGsSubmit(data) {
@@ -2967,10 +2974,6 @@ This cannot be undone.`;
 
               return (
                 <div>
-                  {/* Per-product GS search */}
-                  <SearchBar search={gSearch} setSearch={setGSearch}
-                    placeholder={`Search samples in ${activeProduct.name}...`} />
-
                   {/* Header */}
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
                     <span style={{ fontSize:12, color:"#9CA3AF", fontWeight:500 }}>
