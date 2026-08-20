@@ -216,15 +216,24 @@ export default function App() {
           measurementFileUrl = await uploadFile(dataUrl, reviewData.measFile.name);
         } catch(e) { console.warn("Measurement file upload failed:", e); }
       }
-      // Upload per-comment photos
+      // Upload per-comment photos.
+      // IMPORTANT: only keep {name, url} on the way out — never forward the
+      // original base64 `dataUrl`. Sending that straight into an Airtable
+      // field is what was causing the 500 (works fine for tiny text
+      // comments, blows up as soon as a multi-MB photo is attached).
       async function uploadCommentPhotos(rows) {
         return Promise.all(rows.map(async row => {
-          const photos = await Promise.all((row.photos||[]).map(async ph => {
-            if (!ph.dataUrl) return ph;
-            try { return { ...ph, url: await uploadImage(ph.dataUrl, ph.name) }; }
-            catch(e) { return ph; }
+          const uploaded = await Promise.all((row.photos||[]).map(async ph => {
+            if (!ph.dataUrl) return { name: ph.name, url: ph.url };
+            try {
+              const url = await uploadImage(ph.dataUrl, ph.name);
+              return { name: ph.name, url };
+            } catch(e) {
+              console.warn("Comment photo upload failed, dropping photo:", ph.name, e);
+              return null; // drop rather than send the raw base64 through
+            }
           }));
-          return { ...row, photos };
+          return { ...row, photos: uploaded.filter(Boolean) };
         }));
       }
       const fitComments = await uploadCommentPhotos(reviewData.fitComments||[]);
