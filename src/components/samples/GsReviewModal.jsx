@@ -11,6 +11,7 @@ export default function GsReviewModal({ sample, versionIdx, onClose, onSubmit })
   const [obs,        setObs]       = React.useState([{ text:"", photos:[] }]);
   const [measFile,   setMeasFile]  = React.useState(null);
   const [visible,    setVisible]   = React.useState(false);
+  const [submitting, setSubmitting]= React.useState(false);
   const measRef  = React.useRef();
   const photoRefs= React.useRef({});
 
@@ -31,20 +32,30 @@ export default function GsReviewModal({ sample, versionIdx, onClose, onSubmit })
     setter(r => r.map((row,j) => j===ri ? {...row, photos:row.photos.filter((_,k)=>k!==pi)} : row));
   }
 
-  const canSubmit = status !== null && nextSteps !== null;
+  const canSubmit = status !== null && nextSteps !== null && !submitting;
 
   async function handleSubmit() {
-    await onSubmit({
-      versionId: ver.airtableId,
-      garmentSampleId: sample.id,
-      status, nextSteps, summary,
-      // Keep a row if it has text OR at least one photo — don't drop photo-only comments
-      fitComments:  fit.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
-      mfgComments:  mfg.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
-      obsComments:  obs.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
-      measFile,
-    });
-    close();
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        versionId: ver.airtableId,
+        garmentSampleId: sample.id,
+        status, nextSteps, summary,
+        // Keep a row if it has text OR at least one photo — don't drop photo-only comments
+        fitComments:  fit.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
+        mfgComments:  mfg.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
+        obsComments:  obs.filter(r=>r.text.trim() || (r.photos&&r.photos.length>0)),
+        measFile,
+      });
+      close(); // only close on a successful save — a failed save (e.g. a
+               // photo upload error) throws, so we land in catch and stay
+               // open, keeping all typed comments and attached photos intact
+    } catch (err) {
+      // App.jsx's handleGsDecide already shows the user an alert with
+      // details — nothing more to do here except stop the spinner so
+      // they can fix the issue (e.g. re-attach a photo) and try again.
+      setSubmitting(false);
+    }
   }
 
   const inp = { width:"100%", padding:"8px 10px", border:"1.5px solid #E5E7EB",
@@ -182,12 +193,12 @@ export default function GsReviewModal({ sample, versionIdx, onClose, onSubmit })
               fontSize:14,fontWeight:600,cursor:canSubmit?"pointer":"not-allowed",fontFamily:"inherit",
               background:canSubmit?"#111827":"#F3F4F6",
               color:canSubmit?"#fff":"#9CA3AF",transition:"background 0.15s"}}>
-            {canSubmit?"Submit review":"Select next steps and status to continue"}
+            {submitting
+              ? "Submitting…"
+              : (status !== null && nextSteps !== null ? "Submit review" : "Select next steps and status to continue")}
           </button>
         </div>
       </div>
     </div>
   );
 }
-
-// ── Garment Sample Detail (full version view) ─────────────────────────────────

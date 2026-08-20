@@ -221,24 +221,31 @@ export default function App() {
       // original base64 `dataUrl`. Sending that straight into an Airtable
       // field is what was causing the 500 (works fine for tiny text
       // comments, blows up as soon as a multi-MB photo is attached).
-      async function uploadCommentPhotos(rows) {
+      // If an upload fails, retry once — and if it still fails, THROW
+      // rather than silently dropping the photo. Silently dropping meant a
+      // failed upload just vanished with no indication anything went wrong.
+      async function uploadCommentPhotos(rows, sectionLabel) {
         return Promise.all(rows.map(async row => {
           const uploaded = await Promise.all((row.photos||[]).map(async ph => {
             if (!ph.dataUrl) return { name: ph.name, url: ph.url };
-            try {
-              const url = await uploadImage(ph.dataUrl, ph.name);
-              return { name: ph.name, url };
-            } catch(e) {
-              console.warn("Comment photo upload failed, dropping photo:", ph.name, e);
-              return null; // drop rather than send the raw base64 through
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              try {
+                const url = await uploadImage(ph.dataUrl, ph.name);
+                return { name: ph.name, url };
+              } catch (e) {
+                if (attempt === 2) {
+                  throw new Error(`Failed to upload photo "${ph.name}" in ${sectionLabel} comments — ${e.message || e}`);
+                }
+                await new Promise(r => setTimeout(r, 800)); // brief pause before retry
+              }
             }
           }));
-          return { ...row, photos: uploaded.filter(Boolean) };
+          return { ...row, photos: uploaded };
         }));
       }
-      const fitComments = await uploadCommentPhotos(reviewData.fitComments||[]);
-      const mfgComments = await uploadCommentPhotos(reviewData.mfgComments||[]);
-      const obsComments = await uploadCommentPhotos(reviewData.obsComments||[]);
+      const fitComments = await uploadCommentPhotos(reviewData.fitComments||[], "Fit & Function");
+      const mfgComments = await uploadCommentPhotos(reviewData.mfgComments||[], "Manufacturing");
+      const obsComments = await uploadCommentPhotos(reviewData.obsComments||[], "Observations");
 
       if (ver.airtableId) {
         await reviewSampleVersion({
@@ -277,6 +284,7 @@ export default function App() {
     } catch(err) {
       console.error("Failed to submit review:", err);
       alert("Could not save review.\n\nError: " + (err?.message || String(err)) + "\n\nCheck that your Airtable Sample Versions table has all required fields (see setup guide).");
+      throw err; // let the review modal know the save failed so it stays open instead of closing on a failed save
     }
   }
 
