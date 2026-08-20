@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import Badge from "../shared/Badge";
 import VersionDropdown from "../shared/VersionDropdown";
+import Lightbox from "../shared/Lightbox";
 import { ICO } from "../../lib/icons";
 import { STATUS_COLORS } from "../../lib/theme";
 import { COURIER_OPTIONS } from "../../lib/constants";
@@ -18,6 +19,7 @@ export default function MaterialDetail({ material, view, onClose, onApprove, onR
   const [activeVersionIdx, setActiveVersionIdx] = useState(material.versions.length - 1);
   const [editShipment,     setEditShipment]     = useState(false);
   const [newVer,           setNewVer]           = useState({ factoryNotes:"", courier:"DHL", trackingNumber:"", image:null });
+  const [lightbox,         setLightbox]         = useState(null); // {src, name} | null
   const vFileRef = useRef();
 
   if (!material.versions.length) return (
@@ -87,8 +89,9 @@ export default function MaterialDetail({ material, view, onClose, onApprove, onR
         {/* LEFT */}
         <div>
           {v.image
-            ? <img src={v.image} alt="" style={{ width:"100%", aspectRatio:"4/3", objectFit:"cover",
-                borderRadius:12, border:"1px solid #E5E7EB", marginBottom:14, display:"block" }} />
+            ? <img src={v.image} alt="" onClick={() => setLightbox({ src: v.image, name: `${material.materialName}-v${v.version}` })}
+                style={{ width:"100%", aspectRatio:"4/3", objectFit:"cover", cursor:"pointer",
+                  borderRadius:12, border:"1px solid #E5E7EB", marginBottom:14, display:"block" }} />
             : <div style={{ width:"100%", aspectRatio:"4/3", border:"1.5px dashed #E5E7EB",
                 borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center",
                 justifyContent:"center", background:"#FAFAFA", gap:8, marginBottom:14 }}>
@@ -228,6 +231,9 @@ export default function MaterialDetail({ material, view, onClose, onApprove, onR
           )}
         </div>
       </div>
+      {lightbox && (
+        <Lightbox src={lightbox.src} name={lightbox.name} onClose={() => setLightbox(null)} />
+      )}
     </div>
   );
 }

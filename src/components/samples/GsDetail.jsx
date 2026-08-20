@@ -4,6 +4,8 @@ import GsCommentList from "./GsCommentList";
 import GsReviewModal from "./GsReviewModal";
 import GsNewVersionModal from "./GsNewVersionModal";
 import VersionDropdown from "../shared/VersionDropdown";
+import Lightbox from "../shared/Lightbox";
+import FileRow from "../shared/FileRow";
 import { formatDate } from "../../lib/format";
 import { GS_STATUS_COLORS } from "../../lib/theme";
 
@@ -11,6 +13,7 @@ export default function GsDetail({ sample, view, onBack, onDecide, onSubmitVersi
   const [activeIdx,   setActiveIdx]   = React.useState(sample.versions.length-1);
   const [showReview,  setShowReview]  = React.useState(false);
   const [showNewVer,  setShowNewVer]  = React.useState(false);
+  const [lightbox,    setLightbox]    = useState(null); // {src, name} | null
 
   const ver      = sample.versions[activeIdx];
   const isLatest = activeIdx === sample.versions.length-1;
@@ -87,7 +90,8 @@ export default function GsDetail({ sample, view, onBack, onDecide, onSubmitVersi
                   marginBottom:8,overflow:"hidden"}}>
                   {ver.photos[0].url || ver.photos[0].dataUrl
                     ? <img src={ver.photos[0].url||ver.photos[0].dataUrl} alt=""
-                        style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                        onClick={() => setLightbox({ src: ver.photos[0].url||ver.photos[0].dataUrl, name: ver.photos[0].name || "photo" })}
+                        style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer"}}/>
                     : <div style={{textAlign:"center"}}>
                         <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="#C4C9D4" strokeWidth="1.5" style={{display:"block",margin:"0 auto 6px"}}>
                           <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
@@ -97,12 +101,16 @@ export default function GsDetail({ sample, view, onBack, onDecide, onSubmitVersi
                 </div>
                 {ver.photos.length>1&&(
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {ver.photos.slice(1).map((ph,i)=>(
-                      <div key={i} style={{width:64,height:54,borderRadius:7,
-                        background:"#E5E7EB",border:"1px solid #E5E7EB",overflow:"hidden"}}>
-                        {(ph.url||ph.dataUrl)&&<img src={ph.url||ph.dataUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
-                      </div>
-                    ))}
+                    {ver.photos.slice(1).map((ph,i)=>{
+                      const src = ph.url||ph.dataUrl;
+                      return (
+                        <div key={i} onClick={() => src && setLightbox({ src, name: ph.name || "photo" })}
+                          style={{width:64,height:54,borderRadius:7,cursor: src ? "pointer" : "default",
+                            background:"#E5E7EB",border:"1px solid #E5E7EB",overflow:"hidden"}}>
+                          {src && <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -123,12 +131,7 @@ export default function GsDetail({ sample, view, onBack, onDecide, onSubmitVersi
               <div style={lbl}>Additional files</div>
               <div style={{display:"flex",flexDirection:"column",gap:5}}>
                 {ver.additionalFiles.map((f,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:7,fontSize:12}}>
-                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.8">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    <span style={{color:"#374151"}}>{f.name}</span>
-                  </div>
+                  <FileRow key={i} name={f.name} url={f.url} />
                 ))}
               </div>
             </div>
@@ -191,12 +194,10 @@ export default function GsDetail({ sample, view, onBack, onDecide, onSubmitVersi
               {d.measFile&&(
                 <div style={card}>
                   <div style={lbl}>Measurement sheet</div>
-                  <div style={{display:"flex",alignItems:"center",gap:7,fontSize:12}}>
-                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.8">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                    <span style={{color:"#374151"}}>{typeof d.measFile==="string"?d.measFile:d.measFile.name}</span>
-                  </div>
+                  <FileRow
+                    name={typeof d.measFile==="string" ? d.measFile : d.measFile.name}
+                    url={typeof d.measFile==="string" ? null : d.measFile.url}
+                  />
                 </div>
               )}
             </>);
@@ -223,6 +224,9 @@ export default function GsDetail({ sample, view, onBack, onDecide, onSubmitVersi
         <GsNewVersionModal sample={sample}
           onClose={()=>setShowNewVer(false)}
           onSubmit={async data => { await onSubmitVersion(data); setShowNewVer(false); }}/>
+      )}
+      {lightbox && (
+        <Lightbox src={lightbox.src} name={lightbox.name} onClose={() => setLightbox(null)} />
       )}
     </div>
   );
