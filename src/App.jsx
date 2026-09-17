@@ -845,41 +845,21 @@ This cannot be undone.`;
   );
 
   return (
-    <div style={{ fontFamily:"DM Sans, Helvetica Neue, sans-serif", background:"#F4F5F7", minHeight:"100vh", color:"#111827", display:"flex", flexDirection:"column" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=DM+Mono:wght@400;500;600&display=swap');
-        * { box-sizing:border-box; margin:0; padding:0; }
-        @keyframes spin { to { transform:rotate(360deg); } }
-        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-        ::-webkit-scrollbar { width:4px; }
-        ::-webkit-scrollbar-thumb { background:#E2E5EA; border-radius:4px; }
-        input:focus, select:focus, textarea:focus { outline:none; border-color:#111827 !important; }
-        .prow { transition: box-shadow 0.15s, transform 0.15s, background 0.1s; cursor:pointer; }
-        .prow:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important; transform: translateY(-1px); background:#fff !important; }
-        .mrow:hover { background:#F8F8FA !important; cursor:pointer; }
-        .scard { transition: box-shadow 0.15s, transform 0.12s; cursor:pointer; }
-        .scard:hover { box-shadow:0 4px 16px rgba(0,0,0,0.08) !important; transform:translateY(-1px); }
-        .navitem:hover { background:#F3F4F6 !important; }
-        select { appearance:none; }
-      `}</style>
-
+    <div className="app-root">
       {/* ===== NAV BAR ===== */}
-      <div style={{ background:"#fff", borderBottom:"1px solid #E8EAED", flexShrink:0 }}>
-        <div style={{ height:56, display:"flex", alignItems:"center",
-          justifyContent:"space-between", padding:"0 24px" }}>
+      <div className="navbar">
+        <div className="navbar-inner">
 
           {/* Logo + app title */}
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ width:24, height:24, background:"#111827", borderRadius:6, display:"flex",
-              alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <div className="app-logo">
+            <div className="app-logo-mark">
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             </div>
-            <span style={{ fontSize:14, fontWeight:700, color:"#111827", letterSpacing:"-0.01em" }}>Approvals</span>
+            <span className="app-title">Approvals</span>
           </div>
 
           {/* Factory / Brand pill toggle */}
-          <div style={{ display:"flex", background:"#0F1117", borderRadius:40,
-            padding:4, gap:2, boxShadow:"0 2px 8px rgba(0,0,0,0.18)" }}>
+          <div className="view-toggle">
             {[
               { v:"factory", label:"Factory",
                 icon:<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="2 20 2 10 8 6 8 10 14 6 14 10 20 6 22 6 22 20"/></svg> },
@@ -887,13 +867,9 @@ This cannot be undone.`;
                 icon:<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg> },
             ].map(({ v, icon, label }) => (
               <button key={v}
+                className={view === v ? "active" : "inactive"}
                 onClick={() => { setView(v); setNav(null); setBNav(null); setGSelected(null); setSearch(""); setGSearch(""); }}
-                style={{ display:"flex", alignItems:"center", gap:5,
-                  padding:"6px 14px", borderRadius:32, border:"none", cursor:"pointer",
-                  fontFamily:"inherit", fontSize:12, fontWeight:600,
-                  background: view===v ? "#fff" : "transparent",
-                  color: view===v ? "#111827" : "rgba(255,255,255,0.45)",
-                  transition:"all 0.15s cubic-bezier(0.34,1.56,0.64,1)" }}>
+              >
                 {icon}{label}
               </button>
             ))}
@@ -902,35 +878,25 @@ This cannot be undone.`;
       </div>
 
       {/* ===== BODY: sidebar + content ===== */}
-      <div style={{ display:"flex", flex:1, minHeight:0, overflow:"hidden" }}>
+      <div className="app-shell">
 
         {/* ── Sidebar ── */}
-        <div style={{ width:220, background:"#fff", borderRight:"1px solid #E8EAED",
-          flexShrink:0, display:"flex", flexDirection:"column", overflowY:"auto" }}>
+        <div className="sidebar" style={{ width:220 }}>
 
           {/* Factory submit button + home — always at top */}
-          <div style={{ padding:"12px 10px", borderBottom: openTabs.length > 0 ? "1px solid #F3F4F6" : "none" }}>
+          <div className={openTabs.length > 0 ? "sidebar-header sidebar-header-active" : "sidebar-header"}>
             {/* Home button */}
-            <button className="navitem"
-              onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}
-              style={{ display:"flex", alignItems:"center", gap:8, width:"100%",
-                padding:"8px 10px", borderRadius:7, border:"none", cursor:"pointer",
-                fontFamily:"inherit",
-                background: !activeTab ? "#F3F4F6" : "transparent" }}>
+            <button className={activeTab ? "navitem" : "navitem navitem-active"}
+              onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={!activeTab?"#111827":"#9CA3AF"} strokeWidth="2">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                 <polyline points="9 22 9 12 15 12 15 22"/>
               </svg>
-              <span style={{ fontSize:13, fontWeight: !activeTab ? 600 : 400,
-                color: !activeTab ? "#111827" : "#6B7280" }}>All Products</span>
+              <span className={activeTab ? "nav-label nav-label-muted" : "nav-label nav-label-active"}>All Products</span>
             </button>
             {/* New submission (factory) or placeholder */}
             {view === "factory" && (
-              <button onClick={() => { if (activeTab) setShowNew(true); else setAddingProduct(true); }}
-                style={{ display:"flex", alignItems:"center", gap:6, width:"100%",
-                  padding:"8px 10px", borderRadius:7, border:"1px solid #E8EAED",
-                  background:"transparent", cursor:"pointer", fontFamily:"inherit",
-                  fontSize:12, fontWeight:600, color:"#374151", marginTop:4 }}>
+              <button className="sidebar-action" onClick={() => { if (activeTab) setShowNew(true); else setAddingProduct(true); }}>
                 {ICO.plus()}
                 {activeTab ? "New Submission" : "Add Product"}
               </button>
@@ -939,9 +905,8 @@ This cannot be undone.`;
 
           {/* Open product tabs */}
           {openTabs.length > 0 && (
-            <div style={{ padding:"8px 10px", flex:1 }}>
-              <div style={{ fontSize:10, fontWeight:700, color:"#C4C9D4", textTransform:"uppercase",
-                letterSpacing:"0.08em", padding:"0 4px", marginBottom:6 }}>Open</div>
+            <div className="open-tabs-wrap">
+              <div className="open-tabs-label">Open</div>
               {openTabs.map(tabId => {
                 const p = products.find(x => x.id === tabId);
                 if (!p) return null;
@@ -954,43 +919,23 @@ This cannot be undone.`;
                 const totalPending = pendingMat + pendingGs;
                 const thumb = real.find(m => m.versions[m.versions.length-1].image)?.versions.slice(-1)[0].image || null;
                 return (
-                  <div key={tabId} onClick={() => { setActiveTab(tabId); setSelected(null); setGSelected(null); }}
-                    style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                      padding:"7px 8px", borderRadius:7, cursor:"pointer", marginBottom:2,
-                      background: isActive ? "#F3F4F6" : "transparent",
-                      transition:"background 0.1s" }}
-                    onMouseEnter={e => { if(!isActive) e.currentTarget.style.background="#FAFAFA"; }}
-                    onMouseLeave={e => { if(!isActive) e.currentTarget.style.background="transparent"; }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:7, minWidth:0 }}>
-                      {/* Mini thumb */}
-                      <div style={{ width:24, height:24, borderRadius:5, flexShrink:0, overflow:"hidden",
-                        background:"#F3F4F6", border:"1px solid #E8EAED" }}>
+                  <div key={tabId} className={isActive ? "tab-item tab-item-active" : "tab-item"} onClick={() => { setActiveTab(tabId); setSelected(null); setGSelected(null); }}>
+                    <div className="tab-item-main">
+                      <div className="tab-thumb">
                         {thumb
-                          ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
-                          : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          ? <img src={thumb} alt="" />
+                          : <div className="tab-thumb-placeholder">
                               <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/></svg>
                             </div>
                         }
                       </div>
-                      <span style={{ fontSize:12.5, fontWeight: isActive ? 600 : 400,
-                        color: isActive ? "#111827" : "#6B7280",
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {p.name}
-                      </span>
+                      <span className={isActive ? "tab-name tab-name-active" : "tab-name"}>{p.name}</span>
                     </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+                    <div className="tab-item-actions">
                       {totalPending > 0 && (
-                        <span style={{ fontSize:9, fontWeight:700, width:16, height:16, borderRadius:"50%",
-                          background:"#EF4444", color:"#fff", display:"flex", alignItems:"center",
-                          justifyContent:"center" }}>{totalPending}</span>
+                        <span className="tab-badge">{totalPending}</span>
                       )}
-                      <button onClick={e => closeTab(tabId, e)}
-                        style={{ width:16, height:16, borderRadius:3, border:"none",
-                          background:"transparent", cursor:"pointer", display:"flex",
-                          alignItems:"center", justifyContent:"center", color:"#C4C9D4",
-                          fontSize:14, lineHeight:1, padding:0 }}
-                        onMouseEnter={e => { e.currentTarget.style.color="#6B7280"; e.currentTarget.style.background="#E5E7EB"; }}
-                        onMouseLeave={e => { e.currentTarget.style.color="#C4C9D4"; e.currentTarget.style.background="transparent"; }}>
+                      <button className="close-tab" onClick={e => closeTab(tabId, e)}>
                         ×
                       </button>
                     </div>
@@ -1003,7 +948,7 @@ This cannot be undone.`;
 
         {/* ── Main scrollable content ── */}
         <ErrorBoundary>
-        <div style={{ flex:1, overflowY:"auto", padding:"28px 28px 100px", minWidth:0 }}>
+        <div className="content-scroll">
 
         {/* ===== PAGE CONTENT ===== */}
 
@@ -1096,72 +1041,44 @@ This cannot be undone.`;
                       const sc = STATUS_COLORS[overallStatus] || { bg:"#F3F4F6", text:"#6B7280", dot:"#9CA3AF" };
 
                       return (
-                        <div key={p.id} className="prow"
-                          onClick={() => openTab(p.id)}
-                          style={{ background:"#fff", border:"1px solid #E8EAED",
-                            borderRadius:14, padding:"14px 18px",
-                            display:"flex", alignItems:"center", gap:14,
-                            boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
-
-                          {/* Thumbnail */}
-                          <div style={{ width:52, height:52, borderRadius:10, flexShrink:0,
-                            overflow:"hidden", background:"#F3F4F6", border:"1px solid #E8EAED",
-                            display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <div key={p.id} className="product-card" onClick={() => openTab(p.id)}>
+                          <div className="product-card-thumb">
                             {thumb
-                              ? <img src={thumb} style={{ width:"100%", height:"100%", objectFit:"cover" }} alt="" />
+                              ? <img src={thumb} alt="" />
                               : <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5">
                                   <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8l-2 4h12l-2-4z"/>
                                 </svg>
                             }
                           </div>
 
-                          {/* Info */}
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                              <span style={{ fontSize:14, fontWeight:600, color:"#0F1117", letterSpacing:"-0.01em" }}>
-                                {p.name}
-                              </span>
+                          <div className="product-card-info">
+                            <div className="product-card-header">
+                              <span className="product-card-name">{p.name}</span>
                               {real.length > 0 && (
-                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
-                                  padding:"2px 8px", borderRadius:20, background:sc.bg, color:sc.text,
-                                  fontSize:11, fontWeight:600 }}>
-                                  <span style={{ width:5, height:5, borderRadius:"50%", background:sc.dot }} />
+                                <span className="status-pill" style={{background:sc.bg, color:sc.text}}>
+                                  <span className="status-pill-dot" style={{background:sc.dot}} />
                                   {overallStatus}
                                 </span>
                               )}
                               {gsPending > 0 && (
-                                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
-                                  padding:"2px 8px", borderRadius:20,
-                                  background:GS_STATUS_COLORS["Awaiting Review"].bg,
-                                  color:GS_STATUS_COLORS["Awaiting Review"].text,
-                                  fontSize:11, fontWeight:600 }}>
-                                  <span style={{ width:5, height:5, borderRadius:"50%", background:GS_STATUS_COLORS["Awaiting Review"].dot }} />
+                                <span className="status-pill" style={{background:GS_STATUS_COLORS["Awaiting Review"].bg, color:GS_STATUS_COLORS["Awaiting Review"].text}}>
+                                  <span className="status-pill-dot" style={{background:GS_STATUS_COLORS["Awaiting Review"].dot}} />
                                   {gsPending} sample{gsPending!==1?"s":""} to review
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize:12, color:"#8B909A", display:"flex", gap:5, flexWrap:"wrap" }}>
+                            <div className="product-card-meta">
                               {real.length > 0 && <span>{real.length} material{real.length!==1?"s":""}</span>}
-                              {gs.length > 0 && <><span style={{ color:"#E5E7EB" }}>·</span><span>{gs.length} garment sample{gs.length!==1?"s":""}</span></>}
-                              {timeStr && <><span style={{ color:"#E5E7EB" }}>·</span><span>{timeStr}</span></>}
+                              {gs.length > 0 && <><span className="meta-separator">·</span><span>{gs.length} garment sample{gs.length!==1?"s":""}</span></>}
+                              {timeStr && <><span className="meta-separator">·</span><span>{timeStr}</span></>}
                             </div>
                           </div>
 
-                          {/* Actions */}
-                          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                            <button onClick={e => { e.stopPropagation(); handleDeleteProduct(p.id); }}
-                              style={{ width:30, height:30, borderRadius:7, border:"1px solid #F3F4F6",
-                                background:"transparent", cursor:"pointer", display:"flex",
-                                alignItems:"center", justifyContent:"center", color:"#D1D5DB", transition:"all 0.12s" }}
-                              onMouseEnter={e => { e.currentTarget.style.borderColor="#FEE2E2"; e.currentTarget.style.color="#EF4444"; e.currentTarget.style.background="#FEF2F2"; }}
-                              onMouseLeave={e => { e.currentTarget.style.borderColor="#F3F4F6"; e.currentTarget.style.color="#D1D5DB"; e.currentTarget.style.background="transparent"; }}>
+                          <div className="product-card-actions" onClick={e => e.stopPropagation()}>
+                            <button className="icon-action danger-action" onClick={e => { e.stopPropagation(); handleDeleteProduct(p.id); }}>
                               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                             </button>
-                            <button onClick={() => openTab(p.id)}
-                              style={{ display:"flex", alignItems:"center", gap:5,
-                                padding:"7px 14px", border:"none", borderRadius:8,
-                                fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
-                                background:"#F3F4F6", color:"#374151" }}>
+                            <button className="primary-inline-button" onClick={() => openTab(p.id)}>
                               Open
                               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
                             </button>
@@ -1185,21 +1102,18 @@ This cannot be undone.`;
           <div style={{ maxWidth:900 }}>
             {/* Product header — hidden while viewing a material/sample detail, which has its own back nav */}
             {!detailOpen && (
-            <div style={{ marginBottom:20 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
-                <button onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:"#9CA3AF",
-                    display:"flex", alignItems:"center", gap:4, fontSize:13, fontFamily:"inherit", padding:0 }}>
+            <div className="product-header-wrap">
+              <div className="product-breadcrumb">
+                <button className="back-link" onClick={() => { setActiveTab(null); setSelected(null); setGSelected(null); }}>
                   <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
                   All products
                 </button>
                 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{activeProduct.name}</span>
+                <span className="product-breadcrumb-current">{activeProduct.name}</span>
               </div>
 
               {/* Section toggle: Garment Samples / Materials */}
-              <div style={{ display:"flex", alignItems:"center", gap:2, padding:3,
-                background:"#EEF0F3", borderRadius:11, border:"1px solid #E5E7EB" }}>
+              <div className="section-switcher">
                 {[
                   { key:"samples",   label:"Garment Samples",
                     icon:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.57a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.57a2 2 0 00-1.34-2.23z"/></svg> },
@@ -1208,17 +1122,7 @@ This cannot be undone.`;
                 ].map(s => {
                   const activeTab_ = activeTabSection === s.key;
                   return (
-                    <button key={s.key} onClick={() => setTabSectionForActive(s.key)}
-                      style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
-                        borderRadius:8, border: activeTab_ ? "1px solid #111827" : "1px solid transparent",
-                        cursor:"pointer", fontFamily:"inherit",
-                        fontSize:13, fontWeight: activeTab_ ? 700 : 500,
-                        background: activeTab_ ? "#111827" : "transparent",
-                        color:      activeTab_ ? "#fff"    : "#9CA3AF",
-                        boxShadow:  activeTab_ ? "0 1px 3px rgba(0,0,0,0.15)" : "none",
-                        transition:"all 0.12s" }}
-                      onMouseEnter={e => { if (!activeTab_) e.currentTarget.style.color = "#374151"; }}
-                      onMouseLeave={e => { if (!activeTab_) e.currentTarget.style.color = "#9CA3AF"; }}>
+                    <button key={s.key} className={activeTab_ ? "section-switch-btn active" : "section-switch-btn"} onClick={() => setTabSectionForActive(s.key)}>
                       {s.icon} {s.label}
                     </button>
                   );
