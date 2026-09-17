@@ -1,20 +1,4 @@
-// =============================================================================
-// /api/airtable.js  --  Vercel serverless function
-// =============================================================================
-// Place this file at:  your-project/api/airtable.js
-//
-// Then add these two Environment Variables in Vercel:
-//   AIRTABLE_TOKEN           -> your personal access token from airtable.com/create/tokens
-//   AIRTABLE_BASE_ID         -> the "appXXXXXXXXXXXX" from your Airtable base URL
-//   CLOUDINARY_CLOUD_NAME    -> your Cloudinary cloud name
-//   CLOUDINARY_UPLOAD_PRESET -> your unsigned upload preset (default: ml_default)
-//
-// NOTE: No VITE_ prefix needed here -- these run on the server, not the browser.
-// =============================================================================
-// TABLE & FIELD NAMES
-// =============================================================================
-
-// ── Existing tables (DO NOT CHANGE) ──────────────────────────────────────────
+// Airtable and Cloudinary serverless endpoint.
 const TABLE_PRODUCTS    = "Products";
 const TABLE_MATERIALS   = "Materials";
 const TABLE_SUBMISSIONS = "Submissions";
@@ -40,19 +24,14 @@ const F_SUB_COURIER   = "Courier";
 const F_SUB_TRACKING  = "Tracking Number";
 const F_SUB_SHIPMENT  = "Shipment Status";
 
-// ── New garment sample tables ─────────────────────────────────────────────────
-// These match the exact field names you must create in Airtable.
-// See migration guide for the full schema.
 const TABLE_GARMENT_SAMPLES  = "Garment Samples";
 const TABLE_SAMPLE_VERSIONS  = "Sample Versions";
 
-// Garment Samples fields
 const F_GS_NAME       = "Sample Name";       // Single line text  (record title)
 const F_GS_PRODUCT    = "Product";           // Link to Products
 const F_GS_FACTORY    = "Factory";           // Single line text
 const F_GS_STATUS     = "Status";            // Single select
 
-// Sample Versions fields
 const F_SV_SAMPLE     = "Garment Sample";    // Link to Garment Samples
 const F_SV_VERSION    = "Version Number";    // Number
 const F_SV_DATE       = "Submission Date";   // Date
@@ -68,10 +47,6 @@ const F_SV_FIT_COMMENTS  = "Fit Comments";          // Long text (JSON)
 const F_SV_MFG_COMMENTS  = "Manufacturing Comments"; // Long text (JSON)
 const F_SV_OBS_COMMENTS  = "Observation Comments";  // Long text (JSON)
 const F_SV_MEAS_FILE     = "Measurement File";      // Attachments
-
-// =============================================================================
-// SHARED INFRASTRUCTURE (unchanged)
-// =============================================================================
 
 const TOKEN   = process.env.AIRTABLE_TOKEN;
 const BASE_ID = process.env.AIRTABLE_BASE_ID;
@@ -97,10 +72,6 @@ async function fetchAll(table) {
   return records;
 }
 
-// =============================================================================
-// EXISTING HANDLERS — COMPLETELY UNCHANGED
-// =============================================================================
-
 async function handleGET() {
   const [productRecords, materialRecords, submissionRecords] = await Promise.all([
     fetchAll(TABLE_PRODUCTS),
@@ -119,14 +90,12 @@ async function handleGET() {
     subsByMat[matId].push(sub);
   }
 
-  // Track which products already have at least one material
   const productIdsWithMaterials = new Set();
   for (const mat of materialRecords) {
     const pid = mat.fields[F_MAT_PRODUCT]?.[0];
     if (pid) productIdsWithMaterials.add(pid);
   }
 
-  // Build result: all materials (as before)
   const result = materialRecords.map(mat => {
     const product = productsById[mat.fields[F_MAT_PRODUCT]?.[0]];
     const subs    = (subsByMat[mat.id] || [])
@@ -159,8 +128,6 @@ async function handleGET() {
     };
   });
 
-  // Add sentinel entries for products that have NO materials yet,
-  // so empty product folders survive a refresh.
   for (const p of productRecords) {
     if (!productIdsWithMaterials.has(p.id)) {
       result.push({
@@ -200,15 +167,12 @@ async function handleDELETE(body) {
   return res.json();
 }
 
-// Delete a product and all its materials + submissions
 async function handleDeleteProduct(body) {
   const { productId } = body;
 
-  // 1. Find all materials linked to this product
   const materialRecords = await fetchAll(TABLE_MATERIALS);
   const linked = materialRecords.filter(m => m.fields[F_MAT_PRODUCT]?.[0] === productId);
 
-  // 2. For each material, delete all its submissions first
   for (const mat of linked) {
     const submissionRecords = await fetchAll(TABLE_SUBMISSIONS);
     const subs = submissionRecords.filter(s => s.fields[F_SUB_MATERIAL]?.[0] === mat.id);
@@ -217,13 +181,11 @@ async function handleDeleteProduct(body) {
         method: "DELETE", headers: atHeaders,
       });
     }
-    // 3. Delete the material itself
     await fetch(`${BASE}/${encodeURIComponent(TABLE_MATERIALS)}/${mat.id}`, {
       method: "DELETE", headers: atHeaders,
     });
   }
 
-  // 4. Delete the product record
   await fetch(`${BASE}/${encodeURIComponent(TABLE_PRODUCTS)}/${productId}`, {
     method: "DELETE", headers: atHeaders,
   });
@@ -241,22 +203,18 @@ async function handlePOST(body) {
   return res.json();
 }
 
-// Delete a garment sample and all its versions
 async function handleDeleteGarmentSample(body) {
   const { sampleId } = body;
 
-  // 1. Find all versions linked to this sample
   const versionRecords = await fetchAll(TABLE_SAMPLE_VERSIONS);
   const linked = versionRecords.filter(v => v.fields[F_SV_SAMPLE]?.[0] === sampleId);
 
-  // 2. Delete each version
   for (const v of linked) {
     await fetch(`${BASE}/${encodeURIComponent(TABLE_SAMPLE_VERSIONS)}/${v.id}`, {
       method: "DELETE", headers: atHeaders,
     });
   }
 
-  // 3. Delete the parent garment sample record
   await fetch(`${BASE}/${encodeURIComponent(TABLE_GARMENT_SAMPLES)}/${sampleId}`, {
     method: "DELETE", headers: atHeaders,
   });
@@ -264,7 +222,6 @@ async function handleDeleteGarmentSample(body) {
   return { deleted: true, sampleId };
 }
 
-// Upload a base64 image via Cloudinary unsigned upload.
 async function handleImageUpload(body) {
   const { imageBase64, filename } = body;
   const cloudName    = process.env.CLOUDINARY_CLOUD_NAME;
@@ -287,14 +244,6 @@ async function handleImageUpload(body) {
   return { url: data.secure_url };
 }
 
-// =============================================================================
-// NEW — GARMENT SAMPLES HANDLERS
-// Completely isolated from existing materials logic above.
-// =============================================================================
-
-// ── GET all garment samples with their version history ────────────────────────
-// Returns an array of garment sample objects, each with a versions[] array
-// sorted oldest-first. The client merges this into its own gSamples state.
 async function handleGetGarmentSamples() {
   const [sampleRecords, versionRecords, productRecords] = await Promise.all([
     fetchAll(TABLE_GARMENT_SAMPLES),
@@ -305,7 +254,6 @@ async function handleGetGarmentSamples() {
   const productsById = {};
   for (const p of productRecords) productsById[p.id] = p;
 
-  // Group versions by parent garment sample id
   const versionsBySample = {};
   for (const v of versionRecords) {
     const sampleId = v.fields[F_SV_SAMPLE]?.[0];
@@ -321,7 +269,6 @@ async function handleGetGarmentSamples() {
       .sort((a, b) => (a.fields[F_SV_VERSION] || 0) - (b.fields[F_SV_VERSION] || 0));
 
     const versions = rawVersions.map(v => {
-      // Parse JSON comment fields safely
       let fitComments = [], mfgComments = [], obsComments = [];
       try { fitComments = JSON.parse(v.fields[F_SV_FIT_COMMENTS] || "[]"); } catch {}
       try { mfgComments = JSON.parse(v.fields[F_SV_MFG_COMMENTS] || "[]"); } catch {}
@@ -333,15 +280,11 @@ async function handleGetGarmentSamples() {
         dateReceived:   v.fields[F_SV_DATE]          || "",
         status:         v.fields[F_SV_STATUS]        || "Awaiting Review",
         factoryNotes:   v.fields[F_SV_NOTES]         || "",
-        // Photos — array of Airtable attachment URLs
         photos:         (v.fields[F_SV_PHOTOS] || []).map(a => ({ url: a.url, name: a.filename })),
-        // Additional files — array of {url, name}
         additionalFiles:(v.fields[F_SV_FILES]  || []).map(a => ({ url: a.url, name: a.filename })),
-        // Measurement file — single attachment
         measurementFile:(v.fields[F_SV_MEAS_FILE]?.[0])
           ? { url: v.fields[F_SV_MEAS_FILE][0].url, name: v.fields[F_SV_MEAS_FILE][0].filename }
           : null,
-        // Brand review fields
         brandDecision: v.fields[F_SV_STATUS] === "Awaiting Review" ? null : {
           type:       v.fields[F_SV_STATUS]       || "",
           by:         v.fields[F_SV_REVIEWED_BY]  || "",
@@ -355,7 +298,6 @@ async function handleGetGarmentSamples() {
       };
     });
 
-    // Overall sample status = latest version's status
     const latestVersion = versions[versions.length - 1];
 
     return {
@@ -371,9 +313,6 @@ async function handleGetGarmentSamples() {
   });
 }
 
-// ── CREATE a new garment sample (first version) ───────────────────────────────
-// body: { productName, factory, airtableProductId?, factoryNotes, dateSent,
-//         photoUrls[], additionalFileUrls[], action: "createGarmentSample" }
 async function handleCreateGarmentSample(body) {
   const {
     productName,
@@ -385,7 +324,6 @@ async function handleCreateGarmentSample(body) {
     additionalFileUrls = [],
   } = body;
 
-  // 1. Create the parent Garment Sample record
   const sampleFields = {
     [F_GS_NAME]:    productName,
     [F_GS_FACTORY]: factory,
@@ -403,7 +341,6 @@ async function handleCreateGarmentSample(body) {
   const sampleData = await sampleRes.json();
   if (sampleData.error) throw new Error(`Create garment sample: ${sampleData.error.message}`);
 
-  // 2. Create Version 1 linked to the new sample
   const versionFields = {
     [F_SV_SAMPLE]:   [sampleData.id],
     [F_SV_VERSION]:  1,
@@ -434,9 +371,6 @@ async function handleCreateGarmentSample(body) {
   };
 }
 
-// ── SUBMIT a new version (factory resubmission after brand feedback) ──────────
-// body: { garmentSampleId, versionNum, factoryNotes, dateSent,
-//         photoUrls[], additionalFileUrls[], action: "createSampleVersion" }
 async function handleCreateSampleVersion(body) {
   const {
     garmentSampleId,
@@ -461,7 +395,6 @@ async function handleCreateSampleVersion(body) {
     versionFields[F_SV_FILES] = additionalFileUrls.map(url => ({ url }));
   }
 
-  // Also reset the parent sample status to Awaiting Review
   await fetch(`${BASE}/${encodeURIComponent(TABLE_GARMENT_SAMPLES)}/${garmentSampleId}`, {
     method:  "PATCH",
     headers: atHeaders,
@@ -479,10 +412,6 @@ async function handleCreateSampleVersion(body) {
   return { versionId: data.id, versionData: data };
 }
 
-// ── SUBMIT brand review on a specific version ─────────────────────────────────
-// body: { versionId, garmentSampleId, status, reviewedBy, reviewDate, summary,
-//         nextSteps, fitComments, mfgComments, obsComments,
-//         measurementFileUrl?, action: "reviewSampleVersion" }
 async function handleReviewSampleVersion(body) {
   const {
     versionId,
@@ -498,14 +427,12 @@ async function handleReviewSampleVersion(body) {
     measurementFileUrl,
   } = body;
 
-  // 1. Patch the version record with the full review
   const versionFields = {
     [F_SV_STATUS]:      status,
     [F_SV_REVIEWED_BY]: reviewedBy || "",
     [F_SV_REVIEW_DATE]: reviewDate || new Date().toISOString().slice(0, 10),
     [F_SV_SUMMARY]:     summary    || "",
     [F_SV_NEXT_STEPS]:  nextSteps === "request-another" ? "Request Another Sample" : nextSteps === "no-more" ? "No More Samples Required" : "",
-    // Store comment arrays as JSON strings — cheap, readable, no extra tables needed
     [F_SV_FIT_COMMENTS]: JSON.stringify(fitComments),
     [F_SV_MFG_COMMENTS]: JSON.stringify(mfgComments),
     [F_SV_OBS_COMMENTS]: JSON.stringify(obsComments),
@@ -522,7 +449,6 @@ async function handleReviewSampleVersion(body) {
   const versionData = await versionRes.json();
   if (versionData.error) throw new Error(`Review version: ${versionData.error.message}`);
 
-  // 2. Update the parent sample's top-level status to match
   await fetch(`${BASE}/${encodeURIComponent(TABLE_GARMENT_SAMPLES)}/${garmentSampleId}`, {
     method:  "PATCH",
     headers: atHeaders,
@@ -532,9 +458,6 @@ async function handleReviewSampleVersion(body) {
   return { versionId, status, versionData };
 }
 
-// ── Upload a raw file (PDF, spreadsheet etc.) to Cloudinary ──────────────────
-// Uses the raw upload endpoint rather than image endpoint.
-// body: { fileBase64, filename, action: "uploadFile" }
 async function handleFileUpload(body) {
   const { fileBase64, filename } = body;
   const cloudName    = process.env.CLOUDINARY_CLOUD_NAME;
@@ -545,7 +468,7 @@ async function handleFileUpload(body) {
   const form = new FormData();
   form.append("file", fileBase64);
   form.append("upload_preset", uploadPreset);
-  form.append("resource_type", "raw"); // handles PDFs, spreadsheets, any file type
+  form.append("resource_type", "raw");
   if (filename) form.append("public_id", filename.replace(/\.[^.]+$/, ""));
 
   const res  = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, {
@@ -557,10 +480,6 @@ async function handleFileUpload(body) {
   return { url: data.secure_url, filename };
 }
 
-// =============================================================================
-// ROUTER — existing routes untouched, new garment routes added below
-// =============================================================================
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
@@ -570,69 +489,48 @@ export default async function handler(req, res) {
 
   try {
 
-    // ── GET ────────────────────────────────────────────────────────────────────
     if (req.method === "GET") {
-      // ?section=samples  →  garment samples data
-      // (no query param)  →  existing materials data (unchanged)
       if (req.query?.section === "samples") {
-        const data = await handleGetGarmentSamples();
-        return res.status(200).json(data);
+        return res.status(200).json(await handleGetGarmentSamples());
       }
-      const data = await handleGET();
-      return res.status(200).json(data);
+      return res.status(200).json(await handleGET());
     }
 
-    // ── PATCH ──────────────────────────────────────────────────────────────────
     if (req.method === "PATCH") {
-      const result = await handlePATCH(req.body);
-      return res.status(200).json(result);
+      return res.status(200).json(await handlePATCH(req.body));
     }
 
-    // ── POST ───────────────────────────────────────────────────────────────────
     if (req.method === "POST") {
       const { action } = req.body || {};
 
-      // ── Existing actions (unchanged) ────────────────────────────────────────
       if (action === "uploadImage") {
-        const result = await handleImageUpload(req.body);
-        return res.status(200).json(result);
+        return res.status(200).json(await handleImageUpload(req.body));
       }
       if (action === "deleteProduct") {
-        const result = await handleDeleteProduct(req.body);
-        return res.status(200).json(result);
+        return res.status(200).json(await handleDeleteProduct(req.body));
       }
       if (action === "deleteGarmentSample") {
-        const result = await handleDeleteGarmentSample(req.body);
-        return res.status(200).json(result);
+        return res.status(200).json(await handleDeleteGarmentSample(req.body));
       }
 
-      // ── New garment sample actions ──────────────────────────────────────────
       if (action === "uploadFile") {
-        const result = await handleFileUpload(req.body);
-        return res.status(200).json(result);
+        return res.status(200).json(await handleFileUpload(req.body));
       }
       if (action === "createGarmentSample") {
-        const result = await handleCreateGarmentSample(req.body);
-        return res.status(200).json(result);
+        return res.status(200).json(await handleCreateGarmentSample(req.body));
       }
       if (action === "createSampleVersion") {
-        const result = await handleCreateSampleVersion(req.body);
-        return res.status(200).json(result);
+        return res.status(200).json(await handleCreateSampleVersion(req.body));
       }
       if (action === "reviewSampleVersion") {
-        const result = await handleReviewSampleVersion(req.body);
-        return res.status(200).json(result);
+        return res.status(200).json(await handleReviewSampleVersion(req.body));
       }
 
-      // ── Generic record create (existing, unchanged) ─────────────────────────
-      const result = await handlePOST(req.body);
-      return res.status(200).json(result);
+      return res.status(200).json(await handlePOST(req.body));
     }
 
-    // ── DELETE ─────────────────────────────────────────────────────────────────
     if (req.method === "DELETE") {
-      const result = await handleDELETE(req.body);
-      return res.status(200).json(result);
+      return res.status(200).json(await handleDELETE(req.body));
     }
 
     return res.status(405).json({ error: "Method not allowed" });
