@@ -1,3 +1,5 @@
+import "./Sidebar.css";
+
 export default function Sidebar({
   openTabs,
   products,
@@ -15,7 +17,7 @@ export default function Sidebar({
   closeTab,
 }) {
   return (
-    <div className="sidebar" style={{ width: 220 }}>
+    <div className="sidebar">
       <div className={openTabs.length > 0 ? "sidebar-header sidebar-header-active" : "sidebar-header"}>
         <button
           className={activeTab ? "navitem" : "navitem navitem-active"}

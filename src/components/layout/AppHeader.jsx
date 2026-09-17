@@ -1,3 +1,5 @@
+import "./AppHeader.css";
+
 export default function AppHeader({ view, setView, setNav, setBNav, setGSelected, setSearch, setGSearch }) {
   return (
     <div className="navbar">

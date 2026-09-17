@@ -1,3 +1,4 @@
+import "./ProductList.css";
 import { relativeDate } from "../../lib/format";
 import { STATUS_COLORS, GS_STATUS_COLORS } from "../../lib/theme";
 
@@ -9,7 +10,7 @@ export default function ProductList({
   handleDeleteProduct,
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="product-list">
       {products.map((p) => {
         const mats = p.materialIds.map((id) => materials.find((m) => m.id === id)).filter(Boolean);
         const real = mats.filter((m) => m.materialName !== "__empty__" && m.versions.length > 0);
